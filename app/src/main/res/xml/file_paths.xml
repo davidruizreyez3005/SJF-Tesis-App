@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- App-private external storage (legacy fallback) -->
+    <external-files-path name="tesis_files" path="SJF_Tesis/" />
+    <external-cache-path name="tesis_cache" path="pdfs/" />
+    <cache-path name="app_cache" path="pdfs/" />
+    <!-- Public Documents directory (for Android 9- direct file access) -->
+    <external-path name="public_documents" path="Documents/SJF_Tesis/" />
+</paths>

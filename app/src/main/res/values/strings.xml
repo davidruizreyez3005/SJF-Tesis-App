@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SJF Tesis</string>
+    <string name="file_provider_authority">mx.sjf.tesis.fileprovider</string>
+    <string name="citation_share_subject">Cita · SJF Tesis</string>
+</resources>

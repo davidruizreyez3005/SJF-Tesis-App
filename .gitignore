@@ -1,0 +1,31 @@
+# Build artifacts
+.gradle/
+build/
+app/build/
+.cxx/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+.DS_Store
+
+# Kotlin / Gradle
+*.kotlin_metadata
+.kotlin/
+
+# Llaves de firma: NUNCA se versionan. CI las recibe de los secretos del
+# repositorio (ver SIGNING.md).
+*.keystore
+*.jks
+*.p12
+*.pfx
+keystore/
+keystore.properties
+signing.properties
+
+# Subproductos del workflow al correrlo localmente
+certs.txt
+SJF-Tesis-*.apk
