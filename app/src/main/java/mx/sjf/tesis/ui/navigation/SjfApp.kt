@@ -58,7 +58,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,6 +65,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,6 +78,7 @@ import mx.sjf.tesis.ui.screens.batch.BatchActionSheet
 import mx.sjf.tesis.ui.screens.citation.CitationDialog
 import mx.sjf.tesis.ui.screens.debug.DebugPanel
 import mx.sjf.tesis.ui.screens.detail.DetailSheet
+import mx.sjf.tesis.ui.screens.ejecutoria.EjecutoriaReader
 import mx.sjf.tesis.ui.screens.downloads.DownloadsScreen
 import mx.sjf.tesis.ui.screens.history.HistoryScreen
 import mx.sjf.tesis.ui.screens.saved.SavedScreen
@@ -111,9 +112,10 @@ fun SjfApp(vm: AppViewModel) {
     val searchState by vm.search.collectAsState()
     val batchState by vm.batchState.collectAsState()
     val settings by vm.settings.collectAsState()
+    val lectura by vm.lectura.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     // El estado de la lista vive aquí (y no dentro de la pestaña) para que
     // la posición de scroll se conserve al cambiar de pestaña.
@@ -204,9 +206,12 @@ fun SjfApp(vm: AppViewModel) {
                         NavigationBarItem(
                             selected = isSelected,
                             onClick = {
-                                // Tocar «Buscar» estando en Buscar regresa al inicio de la lista.
-                                if (index == TAB_SEARCH && tab == TAB_SEARCH) {
-                                    scope.launch { resultsListState.animateScrollToItem(0) }
+                                // La pestaña «Buscar» siempre lleva a la pantalla de inicio
+                                // (búsqueda nueva), venga de donde venga.
+                                if (index == TAB_SEARCH) {
+                                    vm.exitSelection()
+                                    vm.volverAlInicio()
+                                    focusManager.clearFocus()
                                 }
                                 selectTab(index)
                             },
@@ -247,6 +252,9 @@ fun SjfApp(vm: AppViewModel) {
             snackbarHost = { if (host == "detail") snackbarSlot() }
         )
     }
+
+    // Lector de ejecutorias («Precedente(s) de la tesis»), sobre la hoja de detalle.
+    lectura?.let { e -> EjecutoriaReader(e, onDismiss = vm::cerrarEjecutoria) }
 
     // Diálogo de cita.
     citationFor?.let { pedida ->

@@ -29,7 +29,12 @@ data class Tesis(
     /** Nota oficial de publicación («Esta tesis se publicó el viernes …»). */
     val publicacion: String = "",
     /** Registros digitales de los votos publicados junto con la tesis. */
-    val votos: List<Long> = emptyList()
+    val votos: List<Long> = emptyList(),
+    /**
+     * Registros digitales de las ejecutorias (sentencias) de las que deriva la
+     * tesis: lo que el Semanario lista como «Precedente(s) de la tesis».
+     */
+    val ejecutorias: List<Long> = emptyList()
 ) {
     val esJurisprudencia: Boolean
         get() = tipo.contains("Jurisprudencia", ignoreCase = true)
@@ -66,7 +71,8 @@ data class Tesis(
         tomo = tomo.ifBlank { base.tomo },
         pagina = pagina.ifBlank { base.pagina },
         publicacion = publicacion.ifBlank { base.publicacion },
-        votos = votos.ifEmpty { base.votos }
+        votos = votos.ifEmpty { base.votos },
+        ejecutorias = ejecutorias.ifEmpty { base.ejecutorias }
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -86,6 +92,7 @@ data class Tesis(
         put("pagina", pagina)
         put("publicacion", publicacion)
         put("votos", JSONArray(votos))
+        put("ejecutorias", JSONArray(ejecutorias))
     }
 
     companion object {
@@ -105,9 +112,13 @@ data class Tesis(
             tomo = o.optString("tomo"),
             pagina = o.optString("pagina"),
             publicacion = o.optString("publicacion"),
-            votos = o.optJSONArray("votos")?.let { a -> (0 until a.length()).map { a.optLong(it) }.filter { it > 0 } }
-                ?: emptyList()
+            votos = registros(o, "votos"),
+            ejecutorias = registros(o, "ejecutorias")
         )
+
+        private fun registros(o: JSONObject, clave: String): List<Long> =
+            o.optJSONArray(clave)?.let { a -> (0 until a.length()).map { a.optLong(it) }.filter { it > 0 } }
+                ?: emptyList()
 
         fun fromJsonArray(raw: String): List<Tesis> = runCatching {
             val arr = JSONArray(raw)
@@ -128,7 +139,48 @@ data class Voto(
     val tipo: String,
     val texto: String,
     val publicacion: String
-)
+) {
+    val urlDetalle: String
+        get() = "https://sjf2.scjn.gob.mx/detalle/voto/$registro"
+}
+
+/**
+ * Ejecutoria (sentencia) de la que deriva una tesis. El Semanario la lista
+ * como «Precedente(s) de la tesis»; [texto] es la resolución completa.
+ */
+data class Ejecutoria(
+    val registro: Long,
+    /** Tipo y número de asunto, p. ej. «Solicitud de sustitución de jurisprudencia 2/2005-PL». */
+    val asunto: String,
+    val rubro: String,
+    val epoca: String,
+    val instancia: String,
+    val fuente: String,
+    val volumen: String,
+    val tomo: String,
+    val pagina: String,
+    val publicacion: String,
+    val texto: String
+) {
+    val urlDetalle: String
+        get() = "https://sjf2.scjn.gob.mx/detalle/ejecutoria/$registro"
+
+    /**
+     * Localización como la muestra el Semanario en «Precedente(s) de la tesis»:
+     * «Novena Época. Pleno. Semanario Judicial de la Federación y su Gaceta,
+     * Tomo XXIII, Mayo de 2006, Pág. 339.»
+     */
+    val localizacion: String
+        get() {
+            val publicacion = listOf(fuente, volumen, tomo, if (pagina.isNotBlank()) "Pág. $pagina" else "")
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+            return listOf(epoca, instancia, publicacion)
+                .filter { it.isNotBlank() }
+                .joinToString(". ")
+                .let { if (it.isNotEmpty()) "$it." else it }
+        }
+}
 
 /** Respuesta paginada de la API de búsqueda. */
 data class SearchResponse(

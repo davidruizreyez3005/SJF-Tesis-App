@@ -1,12 +1,23 @@
-# SJF Tesis v2.4.0
+# SJF Tesis v2.5.0
 
 App Android para consultar el Semanario Judicial de la Federación.
 
-## Novedades de esta versión (2.4.0)
+## Novedades de esta versión (2.5.0)
+
+### ⚖️ Precedente(s) de la tesis
+- Nueva sección **Precedentes de la tesis**, como en el Semanario: cada ejecutoria de la que deriva la tesis aparece numerada con su registro y localización. Ejemplo, P./J. 2/2006:
+  > **1. Registro 19501** — Novena Época. Pleno. Semanario Judicial de la Federación y su Gaceta, Tomo XXIII, Mayo de 2006, Pág. 339.
+- Tócala para leer la **sentencia completa** dentro de la app, compartirla o abrirla en el sitio oficial
+- Los asuntos con su votación y ponente siguen debajo, como «Asuntos que integran la tesis»
+- Cada voto incluye ahora un enlace a su página en el sitio oficial
+
+### 🔍 Pestaña «Buscar»
+- La pestaña **Buscar** de la barra inferior siempre regresa a la pantalla de inicio, con una búsqueda nueva
+
+## Novedades de la versión 2.4.0
 
 ### 🔍 Botón «Buscar»
 - Regresa el botón **Buscar** junto al campo de búsqueda (en la 2.3.0 solo se podía buscar con la tecla del teclado). Con el campo vacío muestra las tesis más recientes
-- Tocar la pestaña **Buscar** estando en ella regresa al inicio de los resultados
 
 ### 📚 Precedentes y votos
 - **Precedentes** ordenados: cada asunto que integra la tesis aparece por separado y numerado («Amparo directo en revisión 6627/2025») con su fecha, votación y ponente; las notas, la aprobación y los criterios contendientes aparecen aparte
@@ -59,7 +70,7 @@ App Android para consultar el Semanario Judicial de la Federación.
 
 > ⚠️ **A partir de esta versión la app se firma con una llave nueva.** Android no permite instalarla
 > encima de la versión anterior: hay que **desinstalar la app una sola vez** y
-> después instalar `SJF-Tesis-v2.4.0.apk`. Las siguientes versiones volverán a
+> después instalar `SJF-Tesis-v2.5.0.apk`. Las siguientes versiones volverán a
 > instalarse como actualización normal.
 >
 > Al desinstalar se borran las **tesis guardadas** y el **historial**. Los PDF

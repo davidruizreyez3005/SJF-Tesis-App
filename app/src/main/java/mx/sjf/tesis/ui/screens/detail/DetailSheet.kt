@@ -11,14 +11,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.rotate
+import mx.sjf.tesis.data.model.Ejecutoria
 import mx.sjf.tesis.data.model.Voto
 import mx.sjf.tesis.data.util.dividirPrecedentes
 import mx.sjf.tesis.data.util.textoPlano
-import mx.sjf.tesis.viewmodel.VotosUi
+import mx.sjf.tesis.viewmodel.DocumentosUi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +35,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -66,6 +69,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import mx.sjf.tesis.data.model.BatchState
@@ -99,15 +103,18 @@ fun DetailSheet(
     val detailLoading by vm.detailLoading.collectAsState()
     val detailError by vm.detailError.collectAsState()
     val votosUi by vm.votos.collectAsState()
+    val ejecutoriasUi by vm.ejecutorias.collectAsState()
     val isSaved = saved.any { it.registro == tesis.registro }
     val isExporting = batchState is BatchState.Progress
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val url = tesis.urlDetalle
 
-    fun openOriginal() {
-        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    fun openUrl(destino: String) {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(destino))) }
             .onFailure { vm.notify("No se encontró un navegador para abrir el enlace") }
     }
+
+    fun openOriginal() = openUrl(url)
 
     ModalBottomSheet(
         onDismissRequest = { vm.closeDetail() },
@@ -173,11 +180,13 @@ fun DetailSheet(
                     )
                 }
 
+                EjecutoriasSection(ejecutoriasUi, onOpen = vm::abrirEjecutoria, onRetry = vm::retryRelacionados)
+
                 if (tesis.precedente.isNotBlank()) {
                     PrecedentesSection(tesis.precedente)
                 }
 
-                VotosSection(votosUi, onRetry = vm::retryVotos)
+                VotosSection(votosUi, onRetry = vm::retryRelacionados, onOpenUrl = ::openUrl)
 
                 val publicada = CitationBuilder.fechaDePublicacion(tesis.publicacion)
                 val obligatoria = CitationBuilder.obligatoriaDesde(tesis.publicacion)
@@ -268,7 +277,96 @@ fun DetailSheet(
 }
 
 /**
- * Precedentes: los asuntos que integran la tesis como lista numerada (el
+ * «Precedente(s) de la tesis», como en el Semanario: las ejecutorias de las
+ * que deriva la tesis, numeradas, con su registro y localización. Tocar una
+ * abre la sentencia completa.
+ */
+@Composable
+private fun EjecutoriasSection(
+    ui: DocumentosUi<Ejecutoria>,
+    onOpen: (Ejecutoria) -> Unit,
+    onRetry: () -> Unit
+) {
+    val titulo = { n: Int -> if (n == 1) "Precedente de la tesis" else "Precedentes de la tesis ($n)" }
+    when (ui) {
+        DocumentosUi.Ninguno -> return
+        is DocumentosUi.Cargando -> {
+            SectionLabel(titulo(ui.cuantos))
+            CargandoFila(if (ui.cuantos == 1) "Cargando el precedente…" else "Cargando ${ui.cuantos} precedentes…")
+        }
+        is DocumentosUi.Error -> {
+            SectionLabel(titulo(ui.cuantos))
+            ErrorFila("No se pudieron cargar los precedentes.", onRetry)
+        }
+        is DocumentosUi.Listos -> {
+            if (ui.documentos.isEmpty()) return
+            SectionLabel(titulo(ui.documentos.size))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ui.documentos.forEachIndexed { i, e ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                            .clickable { onOpen(e) }
+                            .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${i + 1}.  Registro ${e.registro}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                textDecoration = TextDecoration.Underline
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(e.localizacion, style = MaterialTheme.typography.bodyMedium)
+                            if (e.asunto.isNotBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    e.asunto,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowForward,
+                            contentDescription = "Leer la ejecutoria",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CargandoFila(texto: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(10.dp))
+        Text(texto, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ErrorFila(texto: String, onRetry: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            texto,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = onRetry) { Text("Reintentar") }
+    }
+}
+
+/**
+ * Asuntos que integran la tesis: lista numerada (el
  * asunto destacado y, debajo, fecha, votación y ponente), seguidos de las
  * notas oficiales (aprobación, notas, criterios contendientes).
  */
@@ -276,7 +374,7 @@ fun DetailSheet(
 private fun PrecedentesSection(precedente: String) {
     val divididos = remember(precedente) { dividirPrecedentes(precedente) }
     val asuntos = divididos.asuntos
-    SectionLabel(if (asuntos.size > 1) "Precedentes (${asuntos.size})" else "Precedentes")
+    SectionLabel(if (asuntos.size > 1) "Asuntos que integran la tesis (${asuntos.size})" else "Asunto que integra la tesis")
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         asuntos.forEachIndexed { i, p ->
             Row {
@@ -322,45 +420,29 @@ private fun PrecedentesSection(precedente: String) {
 
 /** Votos publicados con la tesis; cada uno se despliega para leerlo completo. */
 @Composable
-private fun VotosSection(ui: VotosUi, onRetry: () -> Unit) {
+private fun VotosSection(ui: DocumentosUi<Voto>, onRetry: () -> Unit, onOpenUrl: (String) -> Unit) {
     when (ui) {
-        VotosUi.Ninguno -> return
-        is VotosUi.Cargando -> {
+        DocumentosUi.Ninguno -> return
+        is DocumentosUi.Cargando -> {
             SectionLabel("Votos (${ui.cuantos})")
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    if (ui.cuantos == 1) "Cargando el voto…" else "Cargando ${ui.cuantos} votos…",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            CargandoFila(if (ui.cuantos == 1) "Cargando el voto…" else "Cargando ${ui.cuantos} votos…")
         }
-        is VotosUi.Error -> {
+        is DocumentosUi.Error -> {
             SectionLabel("Votos (${ui.cuantos})")
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "No se pudieron cargar los votos.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = onRetry) { Text("Reintentar") }
-            }
+            ErrorFila("No se pudieron cargar los votos.", onRetry)
         }
-        is VotosUi.Listos -> {
-            if (ui.votos.isEmpty()) return
-            SectionLabel("Votos (${ui.votos.size})")
+        is DocumentosUi.Listos -> {
+            if (ui.documentos.isEmpty()) return
+            SectionLabel("Votos (${ui.documentos.size})")
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ui.votos.forEach { VotoCard(it) }
+                ui.documentos.forEach { VotoCard(it, onOpenUrl) }
             }
         }
     }
 }
 
 @Composable
-private fun VotoCard(voto: Voto) {
+private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit) {
     var expanded by rememberSaveable(voto.registro) { mutableStateOf(false) }
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "votoChevron")
     Column(
@@ -419,6 +501,11 @@ private fun VotoCard(voto: Voto) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                TextButton(onClick = { onOpenUrl(voto.urlDetalle) }, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Ver el voto en el sitio oficial")
                 }
             }
         }

@@ -9,6 +9,7 @@ import mx.sjf.tesis.core.Constants
 import mx.sjf.tesis.core.NetLog
 import mx.sjf.tesis.data.model.SearchResponse
 import mx.sjf.tesis.data.model.Tesis
+import mx.sjf.tesis.data.model.Ejecutoria
 import mx.sjf.tesis.data.model.Voto
 import mx.sjf.tesis.data.util.decodificarEntidades
 import mx.sjf.tesis.data.util.extraerFecha
@@ -640,54 +641,106 @@ object SjfApi {
         tesis
     }
 
-    // ── Votos ──
+    // ── Votos y ejecutorias (documentos relacionados con una tesis) ──
 
     private const val VOTOS_BASE =
         "https://sjf2.scjn.gob.mx/services/sjfvotosmicroservice/api/public/votos/%IUS%"
+    private const val EJECUTORIAS_BASE =
+        "https://sjf2.scjn.gob.mx/services/sjfejecutoriamicroservice/api/public/ejecutorias/%IUS%"
 
     private val votoCache = ConcurrentHashMap<Long, Voto>()
+
+    /** Ejecutorias recientes (LRU 12): sus textos pueden pasar de 150 000 caracteres. */
+    private val ejecutoriaCache = object : LinkedHashMap<Long, Ejecutoria>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Ejecutoria>) = size > 12
+    }
+
+    private fun registrosDe(o: JSONObject, clave: String): List<Long> =
+        o.optJSONArray(clave)?.let { a -> (0 until a.length()).map { a.optLong(it) }.filter { it > 0 } }
+            ?: emptyList()
+
+    private fun JSONObject.texto(clave: String): String = if (isNull(clave)) "" else optString(clave)
+
+    private fun esDeGaceta(tesis: Tesis) = tesis.fuente.contains("Gaceta", ignoreCase = true)
 
     /**
      * Votos publicados con una tesis, en el orden en que los lista la SCJN.
      * Se piden uno tras otro (no en ráfaga) para no provocar al firewall.
      */
-    suspend fun votos(tesis: Tesis): List<Voto> =
-        tesis.votos.map { voto(it, gaceta = tesis.fuente.contains("Gaceta", ignoreCase = true), referer = tesis.urlDetalle) }
-
-    /**
-     * Un voto por su registro. Igual que las tesis, el servicio solo responde
-     * con el parámetro de edición correcto (medido: el voto 47724, del
-     * semanario electrónico, da 404 sin «isSemanal=true»); se prueba primero
-     * la edición más probable según la fuente de la tesis.
-     */
-    private suspend fun voto(id: Long, gaceta: Boolean, referer: String): Voto = withContext(Dispatchers.IO) {
-        votoCache[id]?.let { return@withContext it }
-        ensureSession()
-        val ediciones = if (gaceta) listOf(DetalleVariants.PLANA, DetalleVariants.SEMANAL)
-                        else listOf(DetalleVariants.SEMANAL, DetalleVariants.PLANA)
-        for (edicion in ediciones) {
-            val json = obtenerJsonConEspera(DetalleVariants.url(VOTOS_BASE, id, edicion), referer) ?: continue
-            val texto = json.optString("texto").takeUnless { json.isNull("texto") } ?: ""
-            if (texto.isBlank()) continue
+    suspend fun votos(tesis: Tesis): List<Voto> = tesis.votos.map { id ->
+        votoCache[id] ?: run {
+            val json = documento(VOTOS_BASE, id, esDeGaceta(tesis), tesis.urlDetalle, "Voto")
+            val texto = json.texto("texto")
             val (titulo, tipo) = tituloYTipoDeVoto(texto)
-            val voto = Voto(
+            Voto(
                 registro = id,
                 titulo = titulo,
                 tipo = tipo,
                 texto = texto,
-                publicacion = limpiarHtml(json.optString("textoPublicacion").takeUnless { json.isNull("textoPublicacion") } ?: "").trim()
-            )
-            votoCache[id] = voto
-            NetLog.log("Voto $id ✓ (${DetalleVariants.etiqueta(edicion)})")
-            return@withContext voto
+                publicacion = limpiarHtml(json.texto("textoPublicacion")).trim()
+            ).also { votoCache[id] = it }
         }
-        throw IOException("Voto $id no disponible")
     }
 
     /**
-     * GET que devuelve el JSON, o null si el recurso no existe (404) en esa
-     * edición. Ante la página de verificación del firewall espera y repite la
-     * misma petición, como [pedirDetalleConEspera].
+     * Ejecutorias de las que deriva una tesis («Precedente(s) de la tesis» en
+     * el Semanario), en el orden de la SCJN, con su texto completo.
+     */
+    suspend fun ejecutorias(tesis: Tesis): List<Ejecutoria> = tesis.ejecutorias.map { id ->
+        synchronized(ejecutoriaCache) { ejecutoriaCache[id] } ?: run {
+            val json = documento(EJECUTORIAS_BASE, id, esDeGaceta(tesis), tesis.urlDetalle, "Ejecutoria")
+            Ejecutoria(
+                registro = id,
+                asunto = json.texto("tipoAsunto").trim().trimEnd('.').let(::tipoAsuntoLegible),
+                rubro = limpiarHtml(json.texto("rubro")).trim(),
+                epoca = json.texto("epoca").trim(),
+                instancia = json.texto("instancia").trim(),
+                fuente = json.texto("fuente").trim(),
+                volumen = json.texto("volumen").trim(),
+                tomo = json.texto("subVolumen").trim().ifBlank { json.texto("tomo").trim() },
+                pagina = json.texto("pagina").trim().takeIf { it.isNotBlank() && it != "0" } ?: "",
+                publicacion = limpiarHtml(json.texto("textoPublicacion")).trim(),
+                texto = json.texto("texto")
+            ).also { synchronized(ejecutoriaCache) { ejecutoriaCache[id] = it } }
+        }
+    }
+
+    /**
+     * «AMPARO DIRECTO EN REVISIÓN 6627/2025» → «Amparo directo en revisión
+     * 6627/2025». La API entrega el tipo de asunto a veces en mayúsculas.
+     */
+    internal fun tipoAsuntoLegible(s: String): String {
+        if (s.isBlank() || s.any { it.isLowerCase() }) return s
+        return s.lowercase().replaceFirstChar { it.uppercase() }
+            .replace(Regex("-([a-z]{1,4})\\b")) { "-" + it.groupValues[1].uppercase() }
+    }
+
+    /**
+     * Un documento (voto o ejecutoria) por su registro. Igual que las tesis,
+     * cada servicio solo responde con el parámetro de edición correcto
+     * (medido: el voto 47724 da 404 sin «isSemanal=true» y la ejecutoria
+     * 19501, de la Gaceta, da 500 con él); se prueba primero la edición más
+     * probable según la fuente de la tesis.
+     */
+    private suspend fun documento(base: String, id: Long, gaceta: Boolean, referer: String, tipo: String): JSONObject =
+        withContext(Dispatchers.IO) {
+            ensureSession()
+            val ediciones = if (gaceta) listOf(DetalleVariants.PLANA, DetalleVariants.SEMANAL)
+                            else listOf(DetalleVariants.SEMANAL, DetalleVariants.PLANA)
+            for (edicion in ediciones) {
+                val json = obtenerJsonConEspera(DetalleVariants.url(base, id, edicion), referer) ?: continue
+                if (json.texto("texto").isBlank()) continue
+                NetLog.log("$tipo $id ✓ (${DetalleVariants.etiqueta(edicion)})")
+                return@withContext json
+            }
+            throw IOException("$tipo $id no disponible")
+        }
+
+    /**
+     * GET que devuelve el JSON, o null si el documento no está en esa edición
+     * (la API responde 404 o 500 según el servicio). Ante la página de
+     * verificación del firewall espera y repite la misma petición, como
+     * [pedirDetalleConEspera].
      */
     private suspend fun obtenerJsonConEspera(url: String, referer: String): JSONObject? {
         var intento = 0
@@ -697,15 +750,14 @@ object SjfApi {
                     fusionarCookies(resp)
                     val raw = resp.body?.string() ?: ""
                     when {
-                        resp.code == 404 -> null
-                        !resp.isSuccessful -> throw IOException("HTTP ${resp.code}")
+                        !resp.isSuccessful -> null
                         esDesafioWaf(raw) -> WafChallengeException("verificación del firewall (Incapsula)")
                         else -> runCatching { JSONObject(raw) }.getOrElse { throw IOException("sin JSON (len=${raw.length})") }
                     }
                 }
             if (resultado !is WafChallengeException) return resultado as JSONObject?
             val espera = ESPERAS_WAF_MS.getOrNull(intento++) ?: throw resultado
-            NetLog.log("Voto · el firewall pidió verificación · reintento en ${espera / 1000.0} s")
+            NetLog.log("Documento · el firewall pidió verificación · reintento en ${espera / 1000.0} s")
             delay(espera)
         }
     }
@@ -1203,9 +1255,8 @@ object SjfApi {
             tomo = str("subVolumen").trim().ifBlank { str("tomo").trim() },
             pagina = str("pagina").trim().takeIf { it.isNotBlank() && it != "0" } ?: "",
             publicacion = limpiarHtml(str("textoPublicacion")).trim(),
-            votos = o.optJSONArray("votos")?.let { a ->
-                (0 until a.length()).map { a.optLong(it) }.filter { it > 0 }
-            } ?: emptyList()
+            votos = registrosDe(o, "votos"),
+            ejecutorias = registrosDe(o, "ejecutorias")
         )
         val loc = str("localizacion").ifBlank { str("localizacionAbr") }
         if (loc.isNotBlank()) {
