@@ -27,7 +27,9 @@ data class Tesis(
     /** Página impresa; vacía en publicaciones solo digitales. */
     val pagina: String = "",
     /** Nota oficial de publicación («Esta tesis se publicó el viernes …»). */
-    val publicacion: String = ""
+    val publicacion: String = "",
+    /** Registros digitales de los votos publicados junto con la tesis. */
+    val votos: List<Long> = emptyList()
 ) {
     val esJurisprudencia: Boolean
         get() = tipo.contains("Jurisprudencia", ignoreCase = true)
@@ -63,7 +65,8 @@ data class Tesis(
         volumen = volumen.ifBlank { base.volumen },
         tomo = tomo.ifBlank { base.tomo },
         pagina = pagina.ifBlank { base.pagina },
-        publicacion = publicacion.ifBlank { base.publicacion }
+        publicacion = publicacion.ifBlank { base.publicacion },
+        votos = votos.ifEmpty { base.votos }
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -82,6 +85,7 @@ data class Tesis(
         put("tomo", tomo)
         put("pagina", pagina)
         put("publicacion", publicacion)
+        put("votos", JSONArray(votos))
     }
 
     companion object {
@@ -100,7 +104,9 @@ data class Tesis(
             volumen = o.optString("volumen"),
             tomo = o.optString("tomo"),
             pagina = o.optString("pagina"),
-            publicacion = o.optString("publicacion")
+            publicacion = o.optString("publicacion"),
+            votos = o.optJSONArray("votos")?.let { a -> (0 until a.length()).map { a.optLong(it) }.filter { it > 0 } }
+                ?: emptyList()
         )
 
         fun fromJsonArray(raw: String): List<Tesis> = runCatching {
@@ -111,6 +117,18 @@ data class Tesis(
         }.getOrDefault(emptyList())
     }
 }
+
+/**
+ * Voto (particular, concurrente, aclaratorio…) publicado junto con una tesis.
+ * [titulo] y [tipo] se derivan del primer párrafo del texto oficial.
+ */
+data class Voto(
+    val registro: Long,
+    val titulo: String,
+    val tipo: String,
+    val texto: String,
+    val publicacion: String
+)
 
 /** Respuesta paginada de la API de búsqueda. */
 data class SearchResponse(

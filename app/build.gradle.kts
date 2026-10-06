@@ -17,8 +17,8 @@ android {
         applicationId = "mx.sjf.tesis"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "2.3.0"
+        versionCode = 10
+        versionName = "2.4.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -69,4 +69,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
+    // org.json real para pruebas JVM (el android.jar solo trae stubs).
+    testImplementation("org.json:json:20240303")
 }

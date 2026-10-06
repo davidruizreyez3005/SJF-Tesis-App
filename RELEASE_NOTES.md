@@ -1,8 +1,19 @@
-# SJF Tesis v2.3.0
+# SJF Tesis v2.4.0
 
 App Android para consultar el Semanario Judicial de la Federación.
 
-## Novedades de esta versión (2.3.0)
+## Novedades de esta versión (2.4.0)
+
+### 🔍 Botón «Buscar»
+- Regresa el botón **Buscar** junto al campo de búsqueda (en la 2.3.0 solo se podía buscar con la tecla del teclado). Con el campo vacío muestra las tesis más recientes
+- Tocar la pestaña **Buscar** estando en ella regresa al inicio de los resultados
+
+### 📚 Precedentes y votos
+- **Precedentes** ordenados: cada asunto que integra la tesis aparece por separado y numerado («Amparo directo en revisión 6627/2025») con su fecha, votación y ponente; las notas, la aprobación y los criterios contendientes aparecen aparte
+- Nueva sección **Votos**: los votos particulares, concurrentes y aclaratorios publicados con la tesis, con su autor; tócalos para leer el texto completo
+- Las tesis guardadas conservan la lista de sus votos
+
+## Novedades de la versión 2.3.0
 
 ### ⚖️ Citas con los datos oficiales
 - Ahora se obtienen de la SCJN la **clave de la tesis** (p. ej. *P./J. 191/2026 (12a.)*), la **fuente**, el **libro, tomo y página** de la Gaceta y la **fecha y hora de publicación** del Semanario electrónico
@@ -46,9 +57,9 @@ App Android para consultar el Semanario Judicial de la Federación.
 
 ## Cómo instalar
 
-> ⚠️ **Esta versión se firma con una llave nueva.** Android no permite instalarla
+> ⚠️ **A partir de esta versión la app se firma con una llave nueva.** Android no permite instalarla
 > encima de la versión anterior: hay que **desinstalar la app una sola vez** y
-> después instalar `SJF-Tesis-v2.3.0.apk`. Las siguientes versiones volverán a
+> después instalar `SJF-Tesis-v2.4.0.apk`. Las siguientes versiones volverán a
 > instalarse como actualización normal.
 >
 > Al desinstalar se borran las **tesis guardadas** y el **historial**. Los PDF

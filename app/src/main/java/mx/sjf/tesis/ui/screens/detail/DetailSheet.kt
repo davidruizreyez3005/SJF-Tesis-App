@@ -2,6 +2,19 @@ package mx.sjf.tesis.ui.screens.detail
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.rotate
+import mx.sjf.tesis.data.model.Voto
+import mx.sjf.tesis.data.util.dividirPrecedentes
+import mx.sjf.tesis.data.util.textoPlano
+import mx.sjf.tesis.viewmodel.VotosUi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -85,6 +98,7 @@ fun DetailSheet(
     val batchState by vm.batchState.collectAsState()
     val detailLoading by vm.detailLoading.collectAsState()
     val detailError by vm.detailError.collectAsState()
+    val votosUi by vm.votos.collectAsState()
     val isSaved = saved.any { it.registro == tesis.registro }
     val isExporting = batchState is BatchState.Progress
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -160,9 +174,10 @@ fun DetailSheet(
                 }
 
                 if (tesis.precedente.isNotBlank()) {
-                    SectionLabel("Precedentes")
-                    TextoFormateado(tesis.precedente, MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+                    PrecedentesSection(tesis.precedente)
                 }
+
+                VotosSection(votosUi, onRetry = vm::retryVotos)
 
                 val publicada = CitationBuilder.fechaDePublicacion(tesis.publicacion)
                 val obligatoria = CitationBuilder.obligatoriaDesde(tesis.publicacion)
@@ -246,6 +261,164 @@ fun DetailSheet(
                     modifier = Modifier.weight(1f)
                 ) {
                     if (!isExporting) vm.exportSingle(tesis)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Precedentes: los asuntos que integran la tesis como lista numerada (el
+ * asunto destacado y, debajo, fecha, votación y ponente), seguidos de las
+ * notas oficiales (aprobación, notas, criterios contendientes).
+ */
+@Composable
+private fun PrecedentesSection(precedente: String) {
+    val divididos = remember(precedente) { dividirPrecedentes(precedente) }
+    val asuntos = divididos.asuntos
+    SectionLabel(if (asuntos.size > 1) "Precedentes (${asuntos.size})" else "Precedentes")
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        asuntos.forEachIndexed { i, p ->
+            Row {
+                if (asuntos.size > 1) {
+                    Text(
+                        "${i + 1}.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.width(24.dp)
+                    )
+                }
+                SelectionContainer {
+                    Column {
+                        Text(p.asunto, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        if (p.detalle.isNotBlank()) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                p.detalle,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (divididos.notas.isNotEmpty()) {
+            SelectionContainer {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    divididos.notas.forEach { nota ->
+                        Text(
+                            nota,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Votos publicados con la tesis; cada uno se despliega para leerlo completo. */
+@Composable
+private fun VotosSection(ui: VotosUi, onRetry: () -> Unit) {
+    when (ui) {
+        VotosUi.Ninguno -> return
+        is VotosUi.Cargando -> {
+            SectionLabel("Votos (${ui.cuantos})")
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (ui.cuantos == 1) "Cargando el voto…" else "Cargando ${ui.cuantos} votos…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        is VotosUi.Error -> {
+            SectionLabel("Votos (${ui.cuantos})")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "No se pudieron cargar los votos.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onRetry) { Text("Reintentar") }
+            }
+        }
+        is VotosUi.Listos -> {
+            if (ui.votos.isEmpty()) return
+            SectionLabel("Votos (${ui.votos.size})")
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ui.votos.forEach { VotoCard(it) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VotoCard(voto: Voto) {
+    var expanded by rememberSaveable(voto.registro) { mutableStateOf(false) }
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "votoChevron")
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                if (voto.tipo.isNotBlank()) {
+                    Text(
+                        "Voto ${voto.tipo}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                }
+                Text(
+                    voto.titulo,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = if (expanded) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                Icons.Outlined.ExpandMore,
+                contentDescription = if (expanded) "Ocultar voto" else "Leer voto",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.rotate(rotation)
+            )
+        }
+        AnimatedVisibility(expanded) {
+            Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                Spacer(Modifier.height(10.dp))
+                // El primer párrafo del texto oficial es el título que ya se ve
+                // en el encabezado de la tarjeta: no se repite.
+                val cuerpo = remember(voto.texto) {
+                    val parrafos = textoPlano(voto.texto).split(Regex("\\n\\s*\\n"))
+                    val sinTitulo = if (parrafos.firstOrNull()?.trim()?.trimEnd('.') == voto.titulo) parrafos.drop(1) else parrafos
+                    sinTitulo.joinToString("\n\n")
+                }
+                TextoFormateado(cuerpo, MaterialTheme.typography.bodyMedium)
+                CitationBuilder.fechaDePublicacion(voto.publicacion)?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Publicado el $it en el Semanario Judicial de la Federación · Registro digital ${voto.registro}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

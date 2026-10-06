@@ -58,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -112,6 +113,7 @@ fun SjfApp(vm: AppViewModel) {
     val settings by vm.settings.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     // El estado de la lista vive aquí (y no dentro de la pestaña) para que
     // la posición de scroll se conserve al cambiar de pestaña.
@@ -201,7 +203,13 @@ fun SjfApp(vm: AppViewModel) {
                         val isSelected = tab == index
                         NavigationBarItem(
                             selected = isSelected,
-                            onClick = { selectTab(index) },
+                            onClick = {
+                                // Tocar «Buscar» estando en Buscar regresa al inicio de la lista.
+                                if (index == TAB_SEARCH && tab == TAB_SEARCH) {
+                                    scope.launch { resultsListState.animateScrollToItem(0) }
+                                }
+                                selectTab(index)
+                            },
                             icon = {
                                 Icon(if (isSelected) item.selectedIcon else item.icon, contentDescription = null)
                             },

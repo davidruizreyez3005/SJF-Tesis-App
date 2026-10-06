@@ -7,6 +7,7 @@ App Android nativa para consultar, leer y descargar tesis y jurisprudencias del 
 - **🔍 Búsqueda en tiempo real** contra `sjf2.scjn.gob.mx`, con filtros combinables por tipo (Jurisprudencia / Tesis Aislada) y materia (Penal, Civil, Laboral, Constitucional). Repite automáticamente palabra por palabra si la frase completa no arroja resultados.
 - **⚡ Cachés en memoria**: los detalles consultados se guardan en un LRU (reabrir una tesis es instantáneo), las búsquedas repetidas se sirven de caché con TTL de 5 minutos y el microservicio correcto se recuerda por registro — sin probar los 4 endpoints cada vez.
 - **🔄 Pull-to-refresh**: desliza hacia abajo en los resultados para reconsultar la SCJN; si la red falla, conservas lo que ya está en pantalla.
+- **📚 Precedentes y votos**: los asuntos que integran cada tesis, numerados, y los votos particulares, concurrentes y aclaratorios con su texto completo.
 - **📖 Lectura del texto completo**: la app obtiene el contenido de la página de detalle, intenta primero el prerendering de Googlebot y cae al cascarón JS si hace falta.
 - **📑 PDF individual**: cada tesis se exporta a PDF con encabezado dorado, tabla de metadatos y cita al pie. Usa `android.graphics.pdf.PdfDocument` nativo, sin dependencias externas.
 - **🗂 PDF combinado con índice**: varias tesis en un solo documento, con portada premium, tabla de contenido con números de página reales y puntos de guía.

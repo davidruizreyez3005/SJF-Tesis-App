@@ -9,11 +9,13 @@ import mx.sjf.tesis.core.Constants
 import mx.sjf.tesis.core.NetLog
 import mx.sjf.tesis.data.model.SearchResponse
 import mx.sjf.tesis.data.model.Tesis
+import mx.sjf.tesis.data.model.Voto
 import mx.sjf.tesis.data.util.decodificarEntidades
 import mx.sjf.tesis.data.util.extraerFecha
 import mx.sjf.tesis.data.util.fechaLegibleDeEpoch
 import mx.sjf.tesis.data.util.limpiarHtml
 import mx.sjf.tesis.data.util.parseFechaLegible
+import mx.sjf.tesis.data.util.tituloYTipoDeVoto
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -638,6 +640,76 @@ object SjfApi {
         tesis
     }
 
+    // ── Votos ──
+
+    private const val VOTOS_BASE =
+        "https://sjf2.scjn.gob.mx/services/sjfvotosmicroservice/api/public/votos/%IUS%"
+
+    private val votoCache = ConcurrentHashMap<Long, Voto>()
+
+    /**
+     * Votos publicados con una tesis, en el orden en que los lista la SCJN.
+     * Se piden uno tras otro (no en ráfaga) para no provocar al firewall.
+     */
+    suspend fun votos(tesis: Tesis): List<Voto> =
+        tesis.votos.map { voto(it, gaceta = tesis.fuente.contains("Gaceta", ignoreCase = true), referer = tesis.urlDetalle) }
+
+    /**
+     * Un voto por su registro. Igual que las tesis, el servicio solo responde
+     * con el parámetro de edición correcto (medido: el voto 47724, del
+     * semanario electrónico, da 404 sin «isSemanal=true»); se prueba primero
+     * la edición más probable según la fuente de la tesis.
+     */
+    private suspend fun voto(id: Long, gaceta: Boolean, referer: String): Voto = withContext(Dispatchers.IO) {
+        votoCache[id]?.let { return@withContext it }
+        ensureSession()
+        val ediciones = if (gaceta) listOf(DetalleVariants.PLANA, DetalleVariants.SEMANAL)
+                        else listOf(DetalleVariants.SEMANAL, DetalleVariants.PLANA)
+        for (edicion in ediciones) {
+            val json = obtenerJsonConEspera(DetalleVariants.url(VOTOS_BASE, id, edicion), referer) ?: continue
+            val texto = json.optString("texto").takeUnless { json.isNull("texto") } ?: ""
+            if (texto.isBlank()) continue
+            val (titulo, tipo) = tituloYTipoDeVoto(texto)
+            val voto = Voto(
+                registro = id,
+                titulo = titulo,
+                tipo = tipo,
+                texto = texto,
+                publicacion = limpiarHtml(json.optString("textoPublicacion").takeUnless { json.isNull("textoPublicacion") } ?: "").trim()
+            )
+            votoCache[id] = voto
+            NetLog.log("Voto $id ✓ (${DetalleVariants.etiqueta(edicion)})")
+            return@withContext voto
+        }
+        throw IOException("Voto $id no disponible")
+    }
+
+    /**
+     * GET que devuelve el JSON, o null si el recurso no existe (404) en esa
+     * edición. Ante la página de verificación del firewall espera y repite la
+     * misma petición, como [pedirDetalleConEspera].
+     */
+    private suspend fun obtenerJsonConEspera(url: String, referer: String): JSONObject? {
+        var intento = 0
+        while (true) {
+            val resultado = executeWithRetry(apiHeaders(referer)) { h -> Request.Builder().url(url).headers(h).get().build() }
+                .use { resp ->
+                    fusionarCookies(resp)
+                    val raw = resp.body?.string() ?: ""
+                    when {
+                        resp.code == 404 -> null
+                        !resp.isSuccessful -> throw IOException("HTTP ${resp.code}")
+                        esDesafioWaf(raw) -> WafChallengeException("verificación del firewall (Incapsula)")
+                        else -> runCatching { JSONObject(raw) }.getOrElse { throw IOException("sin JSON (len=${raw.length})") }
+                    }
+                }
+            if (resultado !is WafChallengeException) return resultado as JSONObject?
+            val espera = ESPERAS_WAF_MS.getOrNull(intento++) ?: throw resultado
+            NetLog.log("Voto · el firewall pidió verificación · reintento en ${espera / 1000.0} s")
+            delay(espera)
+        }
+    }
+
     private fun esDesafioWaf(raw: String): Boolean {
         val inicio = raw.trimStart()
         return inicio.startsWith("<") && (raw.contains("_Incapsula_Resource") || raw.contains("Incapsula", ignoreCase = true))
@@ -1130,7 +1202,10 @@ object SjfApi {
             volumen = str("volumen").trim(),
             tomo = str("subVolumen").trim().ifBlank { str("tomo").trim() },
             pagina = str("pagina").trim().takeIf { it.isNotBlank() && it != "0" } ?: "",
-            publicacion = limpiarHtml(str("textoPublicacion")).trim()
+            publicacion = limpiarHtml(str("textoPublicacion")).trim(),
+            votos = o.optJSONArray("votos")?.let { a ->
+                (0 until a.length()).map { a.optLong(it) }.filter { it > 0 }
+            } ?: emptyList()
         )
         val loc = str("localizacion").ifBlank { str("localizacionAbr") }
         if (loc.isNotBlank()) {

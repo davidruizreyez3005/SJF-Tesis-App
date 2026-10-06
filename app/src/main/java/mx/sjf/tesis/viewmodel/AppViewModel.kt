@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -26,6 +27,7 @@ import mx.sjf.tesis.data.model.SearchResponse
 import mx.sjf.tesis.data.model.Settings
 import mx.sjf.tesis.data.model.Tesis
 import mx.sjf.tesis.data.model.ThemeMode
+import mx.sjf.tesis.data.model.Voto
 import mx.sjf.tesis.data.remote.SjfApi
 import mx.sjf.tesis.data.util.PdfExporter
 import mx.sjf.tesis.data.util.PdfStorage
@@ -58,6 +60,14 @@ enum class MateriaFilter(val label: String, val materia: String?) {
     PENAL("Penal", "Penal"),
     CIVIL("Civil", "Civil"),
     LABORAL("Laboral", "Laboral")
+}
+
+/** Estado de los votos de la tesis abierta. */
+sealed interface VotosUi {
+    data object Ninguno : VotosUi
+    data class Cargando(val cuantos: Int) : VotosUi
+    data class Listos(val votos: List<Voto>) : VotosUi
+    data class Error(val cuantos: Int) : VotosUi
 }
 
 /** Acción opcional que acompaña a un mensaje (botón del Snackbar). */
@@ -121,6 +131,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // DetailSheet distinguir entre "cargando" y "cargado pero sin texto".
     private val _detailLoading = MutableStateFlow(false)
     val detailLoading = _detailLoading.asStateFlow()
+
+    private val _votos = MutableStateFlow<VotosUi>(VotosUi.Ninguno)
+    val votos = _votos.asStateFlow()
 
     // True si la última carga del detalle falló por red (no por falta de texto).
     private val _detailError = MutableStateFlow(false)
@@ -306,11 +319,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun openDetail(tesis: Tesis) {
         _selected.value = tesis
         _detailError.value = false
-        // También se consulta cuando ya hay texto pero faltan los datos de
-        // localización oficiales (clave, fuente…): p. ej. tesis guardadas con
-        // versiones anteriores. Se completan en segundo plano.
-        val incompleta = tesis.texto.isBlank() || !tesis.tieneDatosOficiales
-        if (tesis.registro != 0L && incompleta && settings.value.apiDirect) loadDetail(tesis)
+        cancelVotos()
+        // El detalle se consulta siempre que haya conexión, aunque la tesis ya
+        // tenga texto (p. ej. guardada): así se completan los datos que una
+        // versión anterior no guardaba (clave, fuente, votos). Si ya hay texto
+        // se hace en segundo plano; el detalle queda en caché por sesión.
+        if (tesis.registro != 0L && settings.value.apiDirect) loadDetail(tesis)
+        else if (tesis.votos.isNotEmpty()) loadVotos(tesis)
     }
 
     /** Reintenta obtener el texto completo de la tesis abierta. */
@@ -328,11 +343,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val completa = recibida.conMetadatosDe(tesis).let {
                     if (it.texto.isBlank()) it.copy(texto = tesis.texto) else it
                 }
-                if (_selected.value?.registro == tesis.registro) _selected.value = completa
+                if (_selected.value?.registro == tesis.registro) {
+                    _selected.value = completa
+                    loadVotos(completa)
+                }
                 if (completa.texto.isNotBlank()) store.updateSaved(completa)
             }.onFailure {
                 NetLog.log("Detalle ✗ ${it.message}")
-                if (_selected.value?.registro == tesis.registro) _detailError.value = true
+                if (_selected.value?.registro == tesis.registro) {
+                    _detailError.value = true
+                    if (tesis.votos.isNotEmpty()) loadVotos(tesis)
+                }
             }
             _detailLoading.value = false
         }
@@ -342,6 +363,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _selected.value = null
         _detailLoading.value = false
         _detailError.value = false
+        cancelVotos()
+    }
+
+    // ── Votos de la tesis abierta ──
+
+    private var votosJob: Job? = null
+
+    /** Descarga los votos publicados con la tesis (si los tiene). */
+    private fun loadVotos(tesis: Tesis) {
+        votosJob?.cancel()
+        if (tesis.votos.isEmpty() || !settings.value.apiDirect) {
+            _votos.value = VotosUi.Ninguno
+            return
+        }
+        _votos.value = VotosUi.Cargando(tesis.votos.size)
+        votosJob = viewModelScope.launch {
+            val resultado = try {
+                Result.success(SjfApi.votos(tesis))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            if (_selected.value?.registro != tesis.registro) return@launch
+            _votos.value = resultado.fold(
+                onSuccess = { VotosUi.Listos(it) },
+                onFailure = {
+                    NetLog.log("Votos ✗ ${it.message}")
+                    VotosUi.Error(tesis.votos.size)
+                }
+            )
+        }
+    }
+
+    fun retryVotos() {
+        _selected.value?.let(::loadVotos)
+    }
+
+    private fun cancelVotos() {
+        votosJob?.cancel()
+        votosJob = null
+        _votos.value = VotosUi.Ninguno
     }
 
     // ── Guardadas ──
