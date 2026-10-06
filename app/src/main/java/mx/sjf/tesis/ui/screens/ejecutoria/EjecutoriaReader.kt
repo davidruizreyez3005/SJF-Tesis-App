@@ -2,6 +2,7 @@ package mx.sjf.tesis.ui.screens.ejecutoria
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,7 +21,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +46,7 @@ import androidx.compose.ui.window.DialogProperties
 import mx.sjf.tesis.data.model.Ejecutoria
 import mx.sjf.tesis.data.util.CitationBuilder
 import mx.sjf.tesis.data.util.textoPlano
+import mx.sjf.tesis.pdf.DocumentosPdf
 import mx.sjf.tesis.ui.components.SectionLabel
 
 /**
@@ -50,7 +55,13 @@ import mx.sjf.tesis.ui.components.SectionLabel
  * se dibuja con una lista perezosa: solo se componen los que están en pantalla.
  */
 @Composable
-fun EjecutoriaReader(ejecutoria: Ejecutoria, onDismiss: () -> Unit) {
+fun EjecutoriaReader(
+    ejecutoria: Ejecutoria,
+    exportando: Boolean,
+    onDismiss: () -> Unit,
+    onDownload: () -> Unit,
+    snackbarHost: @Composable () -> Unit
+) {
     val context = LocalContext.current
     val parrafos = remember(ejecutoria.registro) {
         textoPlano(ejecutoria.texto)
@@ -97,6 +108,13 @@ fun EjecutoriaReader(ejecutoria: Ejecutoria, onDismiss: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    if (exportando) {
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        IconButton(onClick = onDownload) { Icon(Icons.Outlined.Download, "Descargar PDF") }
+                    }
                     IconButton(onClick = ::compartir) { Icon(Icons.Outlined.Share, "Compartir") }
                     IconButton(onClick = ::abrirOficial) {
                         Icon(Icons.AutoMirrored.Outlined.OpenInNew, "Ver en el sitio oficial")
@@ -104,63 +122,76 @@ fun EjecutoriaReader(ejecutoria: Ejecutoria, onDismiss: () -> Unit) {
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
 
-                LazyColumn(
-                    Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp)
-                ) {
-                    item(key = "encabezado") {
-                        SelectionContainer {
-                            Column {
-                                if (ejecutoria.asunto.isNotBlank()) {
-                                    Text(ejecutoria.asunto, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                    Spacer(Modifier.height(6.dp))
-                                }
-                                Text(
-                                    ejecutoria.localizacion,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                CitationBuilder.fechaDePublicacion(ejecutoria.publicacion)?.let {
-                                    Spacer(Modifier.height(4.dp))
+                Box(Modifier.weight(1f)) {
+                    LazyColumn(
+                        Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
+                        item(key = "encabezado") {
+                            SelectionContainer {
+                                Column {
+                                    if (ejecutoria.asunto.isNotBlank()) {
+                                        Text(ejecutoria.asunto, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                        Spacer(Modifier.height(6.dp))
+                                    }
                                     Text(
-                                        "Publicada el $it",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        ejecutoria.localizacion,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    CitationBuilder.fechaDePublicacion(ejecutoria.publicacion)?.let {
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "Publicada el $it",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (ejecutoria.rubro.isNotBlank()) {
+                                        SectionLabel("Tesis relacionada")
+                                        Text(
+                                            ejecutoria.rubro,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 6,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    SectionLabel("Sentencia")
                                 }
-                                if (ejecutoria.rubro.isNotBlank()) {
-                                    SectionLabel("Tesis relacionada")
-                                    Text(
-                                        ejecutoria.rubro,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 6,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                SectionLabel("Sentencia")
                             }
                         }
-                    }
-                    items(parrafos) { parrafo ->
-                        SelectionContainer {
-                            Text(
-                                parrafo,
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Justify,
-                                modifier = Modifier.padding(bottom = 14.dp)
-                            )
+                        items(parrafos) { parrafo ->
+                            SelectionContainer {
+                                // Encabezados de la sentencia («RESULTANDO», «CONSIDERANDO»): centrados
+                                // y en negrita, igual que en el PDF.
+                                val encabezado = DocumentosPdf.esEncabezado(parrafo)
+                                Text(
+                                    parrafo,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (encabezado) FontWeight.SemiBold else null,
+                                    textAlign = if (encabezado) TextAlign.Center else TextAlign.Justify,
+                                    modifier = Modifier.padding(bottom = 14.dp)
+                                )
+                            }
+                        }
+                        item(key = "pie") {
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = onDownload, enabled = !exportando, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Outlined.Download, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (exportando) "Generando PDF…" else "Descargar PDF")
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(onClick = ::abrirOficial, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Ver en el sitio oficial")
+                            }
+                            Spacer(Modifier.height(16.dp))
                         }
                     }
-                    item(key = "pie") {
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = ::abrirOficial, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Ver en el sitio oficial")
-                        }
-                        Spacer(Modifier.height(16.dp))
-                    }
+                    Box(Modifier.align(Alignment.BottomCenter)) { snackbarHost() }
                 }
             }
         }

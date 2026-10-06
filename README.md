@@ -9,8 +9,9 @@ App Android nativa para consultar, leer y descargar tesis y jurisprudencias del 
 - **🔄 Pull-to-refresh**: desliza hacia abajo en los resultados para reconsultar la SCJN; si la red falla, conservas lo que ya está en pantalla.
 - **📚 Precedentes y votos**: los precedentes de la tesis (ejecutorias) con su localización y la sentencia completa, los asuntos que la integran y los votos particulares, concurrentes y aclaratorios con su texto completo.
 - **📖 Lectura del texto completo**: la app obtiene el contenido de la página de detalle, intenta primero el prerendering de Googlebot y cae al cascarón JS si hace falta.
-- **📑 PDF individual**: cada tesis se exporta a PDF con encabezado dorado, tabla de metadatos y cita al pie. Usa `android.graphics.pdf.PdfDocument` nativo, sin dependencias externas.
-- **🗂 PDF combinado con índice**: varias tesis en un solo documento, con portada premium, tabla de contenido con números de página reales y puntos de guía.
+- **📑 PDF de tesis, ejecutorias y votos**: motor PDF propio en Kotlin puro (paquete `pdf/`), sin dependencias: fuentes estándar Times sin incrustar, compresión Flate y escritura en flujo. Una ejecutoria de 40 páginas pesa ~100 KB. Incluye marcadores, «Página X de Y» y encabezado corrido.
+- **📚 Expediente**: la tesis con el texto completo de sus precedentes (ejecutorias) y votos en un solo PDF con índice vinculado.
+- **🗂 PDF combinado con índice**: varias tesis en un solo documento, con índice vinculado y números de página reales.
 - **📦 ZIP de PDFs**: cada tesis como PDF individual, empaquetados en un ZIP descargable y compartible.
 - **✍️ Constructor de citas jurídicas** en 5 formatos, armados con los datos oficiales de localización (clave de la tesis, fuente, libro/tomo/página o fecha y hora de publicación, registro digital):
   - **Cita jurídica** — frase de sustento para escritos, con rubro, texto y precedentes
@@ -51,9 +52,14 @@ app/src/main/java/mx/sjf/tesis/
 │       ├── TextUtils.kt                 # foldAccents, parseFecha, sanitizeFileName
 │       ├── HtmlUtils.kt                 # decodificarEntidades, limpiarHtml, parrafosDeTexto
 │       ├── CitationBuilder.kt            # 5 formatos de cita con datos oficiales
-│       ├── PdfExporter.kt               # PDF individual / combinado / ZIP
+│       ├── PdfExporter.kt               # Guarda los PDF (individual / combinado / ZIP)
 │       ├── PdfStorage.kt                # Guardado en Documents/SJF_Tesis (MediaStore)
 │       └── FileSharer.kt                # FileProvider intents
+├── pdf/                                  # Motor PDF propio (Kotlin puro, probado en la JVM)
+│   ├── PdfWriter.kt                      # Objetos PDF, Flate, marcadores, vínculos, xref
+│   ├── Maquetador.kt                     # Párrafos justificados, paginación en dos pasadas, índice
+│   ├── DocumentosPdf.kt                  # Tesis, ejecutoria, voto, expediente, compilación
+│   └── PdfText.kt, TimesMetrics.kt       # Codificación WinAnsi y anchos de Times
 ├── ui/
 │   ├── theme/                            # Color, Typography, Theme
 │   ├── components/                       # BrandMark, Buttons, Tags, Loading, ResultCard…

@@ -259,7 +259,7 @@ private fun DownloadedFileCard(
 /**
  * Consulta MediaStore para listar archivos PDF y ZIP en Documents/SJF_Tesis/.
  * En Android 10+ filtra por RELATIVE_PATH; en Android 9- filtra por prefijo
- * del nombre (Tesis_ o SJF_Tesis_).
+ * del nombre (Tesis_, Ejecutoria_, Voto_, Expediente_ o SJF_Tesis_).
  */
 private fun queryDownloadedFiles(context: android.content.Context): List<DownloadedFile> {
     val results = mutableListOf<DownloadedFile>()
@@ -310,7 +310,7 @@ private fun queryDownloadedFiles(context: android.content.Context): List<Downloa
 
                 while (cursor.moveToNext()) {
                     val name = cursor.getString(nameCol) ?: continue
-                    if (!name.startsWith("Tesis_") && !name.startsWith("SJF_Tesis_")) continue
+                    if (PREFIJOS_PROPIOS.none(name::startsWith)) continue
                     val id = cursor.getLong(idCol)
                     val size = cursor.getLong(sizeCol)
                     val dateAdded = cursor.getLong(dateCol) * 1000L
@@ -335,3 +335,6 @@ private fun formatDate(timestamp: Long): String {
     if (timestamp == 0L) return ""
     return SimpleDateFormat("d MMM yyyy · HH:mm", Locale("es", "MX")).format(Date(timestamp))
 }
+
+/** Prefijos de los archivos que genera la app (ver [mx.sjf.tesis.pdf.DocumentosPdf]). */
+private val PREFIJOS_PROPIOS = listOf("Tesis_", "Ejecutoria_", "Voto_", "Expediente_", "SJF_Tesis_")

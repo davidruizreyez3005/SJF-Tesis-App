@@ -172,6 +172,7 @@ fun SjfApp(vm: AppViewModel) {
     // Los Snackbars se dibujan en la superficie más alta: una hoja modal
     // abierta taparía el host del Scaffold.
     val host = when {
+        lectura != null -> "reader"
         showBatchActions -> "batch"
         selected != null -> "detail"
         else -> "app"
@@ -254,7 +255,15 @@ fun SjfApp(vm: AppViewModel) {
     }
 
     // Lector de ejecutorias («Precedente(s) de la tesis»), sobre la hoja de detalle.
-    lectura?.let { e -> EjecutoriaReader(e, onDismiss = vm::cerrarEjecutoria) }
+    lectura?.let { e ->
+        EjecutoriaReader(
+            ejecutoria = e,
+            exportando = batchState is BatchState.Progress,
+            onDismiss = vm::cerrarEjecutoria,
+            onDownload = { vm.exportEjecutoria(e) },
+            snackbarHost = { if (host == "reader") snackbarSlot() }
+        )
+    }
 
     // Diálogo de cita.
     citationFor?.let { pedida ->

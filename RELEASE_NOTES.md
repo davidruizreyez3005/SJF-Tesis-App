@@ -1,8 +1,22 @@
-# SJF Tesis v2.5.0
+# SJF Tesis v2.6.0
 
 App Android para consultar el Semanario Judicial de la Federación.
 
-## Novedades de esta versión (2.5.0)
+## Novedades de esta versión (2.6.0)
+
+### 📄 Nuevo generador de PDF
+- Motor PDF propio, escrito desde cero: los archivos pesan una fracción de los del sitio de la SCJN y se generan al instante. Ejemplo, la ejecutoria 19501 (43 páginas): **117 KB en menos de 0.1 s**
+- Formato de documento jurídico: Times, texto justificado, ficha de localización como la del Semanario, encabezados «RESULTANDO» / «CONSIDERANDO» centrados, encabezado corrido y «Página X de Y»
+- **Índice lateral (marcadores)** para saltar entre la tesis, los resultandos, los considerandos y los votos; el texto se puede buscar y copiar con acentos
+
+### ⬇️ Descargas
+- **Ejecutorias**: botón **Descargar PDF** en el lector de la sentencia (arriba y al final)
+- **Votos**: cada voto tiene su botón **Descargar PDF**
+- **Expediente completo**: el botón **PDF** de una tesis con precedentes o votos ofrece «Solo la tesis» o «Expediente completo» — la tesis, sus ejecutorias y sus votos en un solo archivo con índice vinculado
+- El PDF de la tesis ahora incluye la clave, la publicación, los asuntos que la integran, sus precedentes con localización y la lista de votos
+- Los PDF combinados y los ZIP por lote usan el nuevo motor
+
+## Novedades de la versión 2.5.0
 
 ### ⚖️ Precedente(s) de la tesis
 - Nueva sección **Precedentes de la tesis**, como en el Semanario: cada ejecutoria de la que deriva la tesis aparece numerada con su registro y localización. Ejemplo, P./J. 2/2006:
@@ -70,7 +84,7 @@ App Android para consultar el Semanario Judicial de la Federación.
 
 > ⚠️ **A partir de esta versión la app se firma con una llave nueva.** Android no permite instalarla
 > encima de la versión anterior: hay que **desinstalar la app una sola vez** y
-> después instalar `SJF-Tesis-v2.5.0.apk`. Las siguientes versiones volverán a
+> después instalar el APK nuevo. Las siguientes versiones volverán a
 > instalarse como actualización normal.
 >
 > Al desinstalar se borran las **tesis guardadas** y el **historial**. Los PDF

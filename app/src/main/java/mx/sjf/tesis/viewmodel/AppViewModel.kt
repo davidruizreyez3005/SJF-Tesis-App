@@ -36,6 +36,8 @@ import mx.sjf.tesis.data.util.countOccurrences
 import mx.sjf.tesis.data.util.foldAccents
 import mx.sjf.tesis.data.util.parseFecha
 import mx.sjf.tesis.data.util.tipoGrupo
+import mx.sjf.tesis.pdf.DocumentoPdf
+import mx.sjf.tesis.pdf.DocumentosPdf
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -605,7 +607,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val uris = mutableListOf<Uri>()
         withTexts.forEachIndexed { index, t ->
             _batchState.value = BatchState.Progress(index + 1, withTexts.size, t.rubro, "Generando PDF")
-            withContext(Dispatchers.IO) { runCatching { PdfExporter.exportSingle(ctx, t) } }
+            withContext(Dispatchers.IO) { runCatching { PdfExporter.guardar(ctx, DocumentosPdf.tesis(t)) } }
                 .onSuccess { uris += it.uri }
         }
         _batchState.value = BatchState.Idle
@@ -626,7 +628,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val result = withContext(Dispatchers.IO) {
             when (mode) {
                 PdfExportMode.COMBINED -> PdfExporter.exportCombined(ctx, withTexts)
-                PdfExportMode.ZIP -> PdfExporter.exportZip(ctx, withTexts)
+                PdfExportMode.ZIP -> PdfExporter.exportZip(ctx, withTexts.map { DocumentosPdf.tesis(it) })
             }
         }
         _batchState.value = BatchState.Done(
@@ -638,13 +640,83 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** Exporta una sola tesis (botón PDF de la hoja de detalle). */
-    fun exportSingle(tesis: Tesis) = launchExport(listOf(tesis), "Generando PDF") { ctx, withTexts ->
-        val result = withContext(Dispatchers.IO) { PdfExporter.exportSingle(ctx, withTexts.first()) }
-        _batchState.value = BatchState.Idle
-        notify("PDF guardado en Descargas", "Abrir", UiAction.OpenFile(result.uri, result.mimeType))
-        if (_selected.value?.registro == tesis.registro && withTexts.first().texto.isNotBlank()) {
-            _selected.value = withTexts.first()
+    /**
+     * Exporta una sola tesis (botón PDF de la hoja de detalle). Con
+     * [expediente] el PDF incluye además el texto completo de sus precedentes
+     * (ejecutorias) y votos, con índice vinculado.
+     */
+    fun exportSingle(tesis: Tesis, expediente: Boolean = false) =
+        launchExport(listOf(tesis), if (expediente) "Reuniendo el expediente" else "Generando PDF") { ctx, withTexts ->
+            val t = withTexts.first()
+            val (ejecutorias, votos) = relacionadosPara(t, obligatorio = expediente)
+            _batchState.value = BatchState.Progress(1, 1, t.rubro, "Generando PDF")
+            val doc = if (expediente) DocumentosPdf.expediente(t, ejecutorias, votos)
+                      else DocumentosPdf.tesis(t, ejecutorias, votos)
+            val result = withContext(Dispatchers.IO) { PdfExporter.guardar(ctx, doc) }
+            _batchState.value = BatchState.Idle
+            notify("PDF guardado en Descargas", "Abrir", UiAction.OpenFile(result.uri, result.mimeType))
+            if (_selected.value?.registro == tesis.registro && t.texto.isNotBlank()) _selected.value = t
+        }
+
+    fun exportExpediente(tesis: Tesis) = exportSingle(tesis, expediente = true)
+
+    /** PDF de una ejecutoria (lector de ejecutorias). */
+    fun exportEjecutoria(e: Ejecutoria) =
+        exportDocumento(DocumentosPdf.ejecutoria(e, _selected.value?.takeIf { e.registro in it.ejecutorias }))
+
+    /** PDF de un voto (tarjeta del voto en la hoja de detalle). */
+    fun exportVoto(v: Voto) =
+        exportDocumento(DocumentosPdf.voto(v, _selected.value?.takeIf { v.registro in it.votos }))
+
+    /** Guarda un documento que ya está en memoria (no requiere red). */
+    private fun exportDocumento(doc: DocumentoPdf) {
+        if (exporting) { notify("Espera a que termine la exportación en curso"); return }
+        _batchState.value = BatchState.Progress(1, 1, doc.titulo, "Generando PDF")
+        viewModelScope.launch {
+            val ctx = getApplication<Application>()
+            try {
+                if (!PdfStorage.hasWritePermission(ctx)) {
+                    notify("Concede el permiso de almacenamiento para guardar archivos")
+                    return@launch
+                }
+                val result = withContext(Dispatchers.IO) { PdfExporter.guardar(ctx, doc) }
+                notify("PDF guardado en Descargas", "Abrir", UiAction.OpenFile(result.uri, result.mimeType))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                NetLog.log("Exportación ✗ ${e.message}")
+                notify("No se pudo generar el PDF. Inténtalo de nuevo.")
+            } finally {
+                _batchState.value = BatchState.Idle
+            }
+        }
+    }
+
+    /**
+     * Ejecutorias y votos de [t] para el PDF. Usa lo que ya cargó la hoja de
+     * detalle; si falta, lo descarga. Si la descarga falla, el PDF de la tesis
+     * sale igual (con los registros digitales), pero el expediente
+     * ([obligatorio]) no tendría sentido sin ellos y se reporta el error.
+     */
+    private suspend fun relacionadosPara(t: Tesis, obligatorio: Boolean): Pair<List<Ejecutoria>, List<Voto>> {
+        val abierta = _selected.value?.registro == t.registro
+        val ejecutorias = (_ejecutorias.value as? DocumentosUi.Listos)?.documentos?.takeIf { abierta }
+            ?: descargar(t.ejecutorias.isNotEmpty(), obligatorio) { SjfApi.ejecutorias(t) }
+        val votos = (_votos.value as? DocumentosUi.Listos)?.documentos?.takeIf { abierta }
+            ?: descargar(t.votos.isNotEmpty(), obligatorio) { SjfApi.votos(t) }
+        return ejecutorias to votos
+    }
+
+    private suspend fun <T> descargar(hay: Boolean, obligatorio: Boolean, bloque: suspend () -> List<T>): List<T> {
+        if (!hay || !settings.value.apiDirect) return emptyList()
+        return try {
+            bloque()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (obligatorio) throw e
+            NetLog.log("PDF: relacionados ✗ ${e.message}")
+            emptyList()
         }
     }
 

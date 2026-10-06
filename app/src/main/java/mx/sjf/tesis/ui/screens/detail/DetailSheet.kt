@@ -6,6 +6,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -186,7 +191,7 @@ fun DetailSheet(
                     PrecedentesSection(tesis.precedente)
                 }
 
-                VotosSection(votosUi, onRetry = vm::retryRelacionados, onOpenUrl = ::openUrl)
+                VotosSection(votosUi, onRetry = vm::retryRelacionados, onOpenUrl = ::openUrl, onDownload = vm::exportVoto)
 
                 val publicada = CitationBuilder.fechaDePublicacion(tesis.publicacion)
                 val obligatoria = CitationBuilder.obligatoriaDesde(tesis.publicacion)
@@ -262,14 +267,42 @@ fun DetailSheet(
                     onCitation()
                 }
 
-                FooterButton(
-                    if (isExporting) "Generando" else "PDF",
-                    Icons.Outlined.PictureAsPdf,
-                    primary = true,
-                    loading = isExporting,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if (!isExporting) vm.exportSingle(tesis)
+                // Con precedentes o votos, el PDF ofrece también el expediente
+                // completo (tesis + ejecutorias + votos en un solo archivo).
+                val conRelacionados = tesis.ejecutorias.isNotEmpty() || tesis.votos.isNotEmpty()
+                var menuPdf by remember { mutableStateOf(false) }
+                Box(Modifier.weight(1f)) {
+                    FooterButton(
+                        if (isExporting) "Generando" else "PDF",
+                        Icons.Outlined.PictureAsPdf,
+                        primary = true,
+                        loading = isExporting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isExporting) return@FooterButton
+                        if (conRelacionados) menuPdf = true else vm.exportSingle(tesis)
+                    }
+                    DropdownMenu(expanded = menuPdf, onDismissRequest = { menuPdf = false }) {
+                        DropdownMenuItem(
+                            text = { MenuPdfTexto("Solo la tesis", "Ficha, texto y precedentes") },
+                            leadingIcon = { Icon(Icons.Outlined.Description, null) },
+                            onClick = { menuPdf = false; vm.exportSingle(tesis) }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                MenuPdfTexto(
+                                    "Expediente completo",
+                                    listOfNotNull(
+                                        "Tesis",
+                                        tesis.ejecutorias.size.takeIf { it > 0 }?.let { if (it == 1) "ejecutoria" else "$it ejecutorias" },
+                                        tesis.votos.size.takeIf { it > 0 }?.let { if (it == 1) "voto" else "$it votos" }
+                                    ).joinToString(" + ") + ", con índice"
+                                )
+                            },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.LibraryBooks, null) },
+                            onClick = { menuPdf = false; vm.exportExpediente(tesis) }
+                        )
+                    }
                 }
             }
         }
@@ -420,7 +453,12 @@ private fun PrecedentesSection(precedente: String) {
 
 /** Votos publicados con la tesis; cada uno se despliega para leerlo completo. */
 @Composable
-private fun VotosSection(ui: DocumentosUi<Voto>, onRetry: () -> Unit, onOpenUrl: (String) -> Unit) {
+private fun VotosSection(
+    ui: DocumentosUi<Voto>,
+    onRetry: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onDownload: (Voto) -> Unit
+) {
     when (ui) {
         DocumentosUi.Ninguno -> return
         is DocumentosUi.Cargando -> {
@@ -435,14 +473,14 @@ private fun VotosSection(ui: DocumentosUi<Voto>, onRetry: () -> Unit, onOpenUrl:
             if (ui.documentos.isEmpty()) return
             SectionLabel("Votos (${ui.documentos.size})")
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ui.documentos.forEach { VotoCard(it, onOpenUrl) }
+                ui.documentos.forEach { VotoCard(it, onOpenUrl, onDownload) }
             }
         }
     }
 }
 
 @Composable
-private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit) {
+private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit, onDownload: (Voto) -> Unit) {
     var expanded by rememberSaveable(voto.registro) { mutableStateOf(false) }
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "votoChevron")
     Column(
@@ -502,13 +540,29 @@ private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                TextButton(onClick = { onOpenUrl(voto.urlDetalle) }, contentPadding = PaddingValues(0.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Ver el voto en el sitio oficial")
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TextButton(onClick = { onDownload(voto) }, contentPadding = PaddingValues(0.dp)) {
+                        Icon(Icons.Outlined.Download, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Descargar PDF")
+                    }
+                    TextButton(onClick = { onOpenUrl(voto.urlDetalle) }, contentPadding = PaddingValues(0.dp)) {
+                        Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Sitio oficial")
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MenuPdfTexto(titulo: String, detalle: String) {
+    Column(Modifier.padding(vertical = 2.dp)) {
+        Text(titulo, style = MaterialTheme.typography.bodyLarge)
+        Text(detalle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
