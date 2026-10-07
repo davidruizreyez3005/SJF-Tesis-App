@@ -88,9 +88,9 @@ app/src/main/java/mx/sjf/tesis/
 Requiere JDK 17 y Android SDK 34; el wrapper descarga Gradle 8.5 (con
 verificación de checksum). Compatible con Android 8.0+ (API 26).
 
-Para una APK de release firmada, exporta las variables `SIGNING_*` y ejecuta
-`./gradlew assembleRelease` (ver [SIGNING.md](SIGNING.md)). La llave de firma
-nunca se guarda en el repositorio.
+La APK de release se firma con una llave derivada de un único secreto,
+`ANDROID_UPDATE_SEED` (ver [SIGNING.md](SIGNING.md)). La llave de firma nunca
+se guarda en el repositorio.
 
 ## 📦 CI/CD
 
@@ -99,10 +99,10 @@ El workflow [`build.yml`](.github/workflows/build.yml) corre en cada push a
 workflow**):
 
 1. Pruebas unitarias.
-2. **Con** los secretos de firma: APK de release firmada, verificación de la
+2. **Con** el secreto `ANDROID_UPDATE_SEED`: APK de release firmada, verificación de la
    firma y publicación como release `v<versión>` en la página de
    [Releases](../../releases).
-3. **Sin** los secretos (o en pull requests): APK de depuración, descargable
+3. **Sin** el secreto (o en pull requests): APK de depuración, descargable
    como artefacto de la corrida.
 
 La versión se toma de `versionName` en `app/build.gradle.kts` y las notas de

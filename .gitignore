@@ -29,3 +29,4 @@ signing.properties
 # Subproductos del workflow al correrlo localmente
 certs.txt
 SJF-Tesis-*.apk
+__pycache__/

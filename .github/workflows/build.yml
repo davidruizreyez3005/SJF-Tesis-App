@@ -1,7 +1,7 @@
 name: Build APK
 
 # Compila, prueba y exporta la APK.
-#  - Con los secretos de firma configurados (ver SIGNING.md): APK de release
+#  - Con el secreto ANDROID_UPDATE_SEED (ver SIGNING.md): APK de release
 #    firmada, verificada y publicada como GitHub Release (en main o en tags v*).
 #  - Sin ellos (p. ej. en pull requests): APK de depuración, solo como artefacto
 #    descargable de la corrida.
@@ -46,36 +46,39 @@ jobs:
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --console=plain
 
-      # La llave llega exclusivamente de los secretos del repositorio. Se
-      # escribe en un archivo temporal del runner, fuera del checkout, y se
-      # borra al final pase lo que pase.
+      # La llave se deriva en cada build del único secreto ANDROID_UPDATE_SEED
+      # (scripts/llave_de_firma.py): misma semilla = mismo certificado = las
+      # actualizaciones se instalan encima. El almacén se escribe en un archivo
+      # temporal del runner, fuera del checkout, y se borra al final.
+      - name: Set up key derivation
+        run: |
+          python3 -m venv "$RUNNER_TEMP/firma"
+          "$RUNNER_TEMP/firma/bin/pip" install --quiet --disable-pip-version-check cryptography==49.0.0
+          # Si la derivación cambiara, la llave también: se detiene el build.
+          "$RUNNER_TEMP/firma/bin/python" scripts/llave_de_firma.py --probar
+
       - name: Prepare signing key
         env:
-          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          ANDROID_UPDATE_SEED: ${{ secrets.ANDROID_UPDATE_SEED }}
         run: |
-          faltan=""
-          for s in SIGNING_KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
-            [ -n "${!s}" ] || faltan="$faltan $s"
-          done
-          if [ -n "$faltan" ]; then
-            echo "::warning title=APK sin firma de release::Faltan los secretos$faltan (ver SIGNING.md). Se exporta una APK de depuración."
+          if [ -z "$ANDROID_UPDATE_SEED" ]; then
+            echo "::warning title=APK sin firma de release::Falta el secreto ANDROID_UPDATE_SEED (ver SIGNING.md). Se exporta una APK de depuración."
             echo "SIGNED=false" >> "$GITHUB_ENV"
             exit 0
           fi
-          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-          echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
-          echo "SIGNED=true" >> "$GITHUB_ENV"
-          echo "✓ Llave de firma tomada de los secretos del repositorio"
+          PASSWORD=$("$RUNNER_TEMP/firma/bin/python" scripts/llave_de_firma.py "$RUNNER_TEMP/release.p12")
+          echo "::add-mask::$PASSWORD"
+          {
+            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.p12"
+            echo "SIGNING_STORE_PASSWORD=$PASSWORD"
+            echo "SIGNING_KEY_PASSWORD=$PASSWORD"
+            echo "SIGNING_KEY_ALIAS=sjf-tesis"
+            echo "SIGNED=true"
+          } >> "$GITHUB_ENV"
+          echo "✓ Llave de firma derivada de ANDROID_UPDATE_SEED"
 
       - name: Build signed release APK
         if: env.SIGNED == 'true'
-        env:
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           ./gradlew assembleRelease --console=plain
           cp app/build/outputs/apk/release/app-release.apk "SJF-Tesis-v${VERSION}.apk"
@@ -137,4 +140,4 @@ jobs:
 
       - name: Remove signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/release.keystore"
+        run: rm -f "$RUNNER_TEMP/release.p12"

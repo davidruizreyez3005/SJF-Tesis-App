@@ -1,80 +1,65 @@
 # Firma de la APK
 
-La llave de firma **nunca** se guarda en el repositorio. CI la recibe de los
-secretos de GitHub, la escribe en un archivo temporal del runner y lo borra al
-terminar. `.gitignore` bloquea cualquier archivo de llave (`*.keystore`,
-`*.jks`, `*.p12`, `keystore.properties`…).
+La firma depende de **un solo secreto**: `ANDROID_UPDATE_SEED`. En cada build,
+CI deriva de él la llave RSA-3072 y el certificado con
+[`scripts/llave_de_firma.py`](scripts/llave_de_firma.py), los usa para firmar
+y borra el almacén temporal al terminar. Ninguna llave se guarda en el
+repositorio; `.gitignore` bloquea `*.keystore`, `*.jks`, `*.p12`, etc.
 
-Android exige que todas las versiones de una app estén firmadas con la **misma
-llave**: si cambia, una actualización no se puede instalar encima de la
-anterior. Por eso la llave se crea una sola vez y se conserva.
+Android exige que todas las versiones de una app estén firmadas con el
+**mismo certificado**. La derivación es determinista: la misma semilla produce
+siempre el mismo certificado, byte por byte, así que mientras conserves la
+semilla podrás publicar actualizaciones que se instalan encima.
 
-## 1. Crear la llave (una sola vez, en tu computadora)
+## La semilla es la llave
 
-Requiere Java (`keytool` viene incluido):
+Quien conozca `ANDROID_UPDATE_SEED` puede firmar APK que tu teléfono aceptará
+como actualizaciones legítimas. Por eso:
 
-```bash
-keytool -genkeypair -v \
-  -keystore sjf-tesis-release.jks \
-  -storetype PKCS12 \
-  -keyalg RSA -keysize 4096 -validity 10000 \
-  -alias sjf-tesis
-```
+- Debe ser **aleatoria**, no una frase: mínimo 32 caracteres (el script
+  rechaza las más cortas). Genera una con `openssl rand -hex 32`.
+- Guárdala **fuera de GitHub**, con respaldo. Si se pierde, ya no se podrán
+  publicar actualizaciones; habrá que desinstalar y reinstalar con una nueva.
+- La derivación pasa por scrypt (lenta a propósito) para encarecer ataques de
+  fuerza bruta, pero eso no sustituye una semilla aleatoria.
 
-`keytool` pedirá una contraseña y tus datos (nombre, organización, ciudad…).
-Con almacenes PKCS12 la contraseña de la llave es la misma que la del almacén.
-
-**Guarda el archivo `.jks` y la contraseña en un lugar seguro fuera de GitHub**
-(por ejemplo, un gestor de contraseñas con respaldo). Si se pierden, ya no se
-podrán publicar actualizaciones de la app. No lo copies dentro de esta carpeta
-del proyecto.
-
-## 2. Cargarla como secretos del repositorio
+## 1. Cargar el secreto
 
 En GitHub: **Settings › Secrets and variables › Actions › Secrets › New
-repository secret**. Crea estos cuatro:
+repository secret** → nombre `ANDROID_UPDATE_SEED`, valor: la semilla.
 
-| Secreto | Valor |
-|---|---|
-| `SIGNING_KEYSTORE_BASE64` | El archivo `.jks` en Base64 (ver abajo) |
-| `SIGNING_STORE_PASSWORD` | La contraseña que elegiste |
-| `SIGNING_KEY_PASSWORD` | La misma contraseña |
-| `SIGNING_KEY_ALIAS` | `sjf-tesis` (o el alias que usaste) |
+## 2. Fijar la huella (recomendado)
 
-Para obtener el Base64 del archivo:
+La primera corrida firmada muestra en el paso *Verify APK signature* la huella
+SHA-256 del certificado. Créala como **variable** (no secreto; la huella es
+pública) en **Settings › Secrets and variables › Actions › Variables**:
+`SIGNING_CERT_SHA256`. A partir de ahí CI rechaza cualquier APK firmada con
+otra llave (p. ej. si alguien cambia la semilla por error).
 
-```bash
-base64 -w0 sjf-tesis-release.jks    # Linux
-base64 -i sjf-tesis-release.jks     # macOS
-```
+## 3. Probar
 
-## 3. Fijar la huella de la llave (recomendado)
+**Actions › Build APK › Run workflow**. *Prepare signing key* debe decir
+«Llave de firma derivada de ANDROID_UPDATE_SEED» y la corrida publica la
+Release `v<versión>` con la APK firmada.
 
-Obtén la huella SHA-256 del certificado:
+## Protección contra cambios en la derivación
 
-```bash
-keytool -list -v -keystore sjf-tesis-release.jks -alias sjf-tesis | grep SHA256
-```
-
-En **Settings › Secrets and variables › Actions › Variables › New repository
-variable** crea `SIGNING_CERT_SHA256` con ese valor (con o sin `:`). A partir
-de ahí, CI rechaza cualquier APK firmada con otra llave. La huella es pública
-por naturaleza: no es un secreto.
-
-## 4. Probar
-
-**Actions › Build APK › Run workflow**. El paso *Prepare signing key* debe
-decir «Llave de firma tomada de los secretos del repositorio» y *Verify APK
-signature*, «Firma verificada».
+Cualquier cambio en el script (o en la librería `cryptography`, fijada a una
+versión exacta en el workflow) cambiaría el certificado y rompería las
+actualizaciones. CI ejecuta `llave_de_firma.py --probar` en cada build: deriva
+con una semilla de prueba pública y exige la huella registrada en el script.
+Si no coincide, el build se detiene.
 
 ## Compilar firmado en tu computadora
 
-Exporta las variables antes de compilar (sin guardarlas en el proyecto):
-
 ```bash
-export SIGNING_STORE_FILE=/ruta/fuera/del/proyecto/sjf-tesis-release.jks
-export SIGNING_STORE_PASSWORD=…  SIGNING_KEY_PASSWORD=…  SIGNING_KEY_ALIAS=sjf-tesis
-gradle assembleRelease
+python3 -m venv /tmp/firma && /tmp/firma/bin/pip install cryptography==49.0.0
+read -rs ANDROID_UPDATE_SEED && export ANDROID_UPDATE_SEED
+export SIGNING_STORE_FILE=/tmp/sjf-release.p12 SIGNING_KEY_ALIAS=sjf-tesis
+export SIGNING_STORE_PASSWORD=$(/tmp/firma/bin/python scripts/llave_de_firma.py "$SIGNING_STORE_FILE")
+export SIGNING_KEY_PASSWORD=$SIGNING_STORE_PASSWORD
+./gradlew assembleRelease
+rm -f "$SIGNING_STORE_FILE"
 ```
 
 Sin esas variables, `assembleRelease` genera la APK sin firmar.
