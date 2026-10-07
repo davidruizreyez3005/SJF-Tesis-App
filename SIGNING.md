@@ -30,7 +30,7 @@ repository secret** → nombre `ANDROID_UPDATE_SEED`, valor: la semilla.
 
 ## 2. Fijar la huella (recomendado)
 
-La primera corrida firmada muestra en el paso *Verify APK signature* la huella
+La corrida firmada muestra en el paso *Verify APK signature* la huella
 SHA-256 del certificado. Créala como **variable** (no secreto; la huella es
 pública) en **Settings › Secrets and variables › Actions › Variables**:
 `SIGNING_CERT_SHA256`. A partir de ahí CI rechaza cualquier APK firmada con

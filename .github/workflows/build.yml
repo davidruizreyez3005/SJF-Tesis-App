@@ -101,7 +101,9 @@ jobs:
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
           "$APKSIGNER" verify --print-certs "$APK" | tee certs.txt
-          ACTUAL=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt | tr -d ':' | tr 'A-F' 'a-f')
+          # Con minSdk 26 solo hay firma v2+, y apksigner imprime «V2 Signer: …» en
+          # lugar de «Signer #1 …»: se aceptan ambos formatos.
+          ACTUAL=$(sed -nE 's/^(Signer #1|V[0-9.]+ Signer):? certificate SHA-256 digest: //p' certs.txt | head -1 | tr -d ':' | tr 'A-F' 'a-f')
           test -n "$ACTUAL" || { echo "::error::La APK no está firmada"; exit 1; }
           if [ -n "$EXPECTED_CERT_SHA256" ]; then
             EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')
