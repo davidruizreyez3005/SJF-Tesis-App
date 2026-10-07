@@ -39,8 +39,8 @@ object PdfExporter {
         guardar(context, DocumentosPdf.compilacion(tesis, "SJF_Tesis_Compilacion_${marcaDeTiempo()}.pdf"))
 
     /** Un PDF por documento, empaquetados en un ZIP (cada uno se escribe directo al ZIP). */
-    fun exportZip(context: Context, docs: List<DocumentoPdf>): ExportResult {
-        val name = "SJF_Tesis_${marcaDeTiempo()}.zip"
+    fun exportZip(context: Context, docs: List<DocumentoPdf>, nombre: String? = null): ExportResult {
+        val name = nombre ?: "SJF_Tesis_${marcaDeTiempo()}.zip"
         val uri = PdfStorage.saveToPublicDocuments(context, name, ZIP) { os ->
             val zip = ZipOutputStream(os)
             val usados = mutableSetOf<String>()

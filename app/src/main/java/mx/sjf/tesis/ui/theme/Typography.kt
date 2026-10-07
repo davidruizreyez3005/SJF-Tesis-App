@@ -5,6 +5,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.LocaleList
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.sp
 import mx.sjf.tesis.R
 
@@ -16,6 +19,17 @@ import mx.sjf.tesis.R
 val DisplayFont = FontFamily(
     Font(R.font.playfair_display_600, FontWeight.SemiBold),
     Font(R.font.playfair_display_700, FontWeight.Bold)
+)
+
+/**
+ * Texto corrido en español: división silábica y cortes de línea pensados para
+ * párrafos. Sin esto, el texto justificado de tesis y sentencias deja huecos
+ * enormes entre palabras en la columna angosta de un teléfono.
+ */
+private val Lectura = TextStyle(
+    localeList = LocaleList("es-MX"),
+    hyphens = Hyphens.Auto,
+    lineBreak = LineBreak.Paragraph
 )
 
 /** Tipografía escalable por el usuario (fontScale en Settings). */
@@ -45,13 +59,13 @@ fun appTypography(scale: Float): Typography = Typography(
     ),
     bodyLarge = TextStyle(
         fontSize = 16.sp * scale, lineHeight = 26.sp * scale
-    ),
+    ).merge(Lectura),
     bodyMedium = TextStyle(
         fontSize = 14.sp * scale, lineHeight = 21.sp * scale
-    ),
+    ).merge(Lectura),
     bodySmall = TextStyle(
         fontSize = 12.sp * scale, lineHeight = 17.sp * scale
-    ),
+    ).merge(Lectura),
     labelLarge = TextStyle(
         fontSize = 14.sp * scale, fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.4f.sp

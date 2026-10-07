@@ -1,8 +1,22 @@
-# SJF Tesis v2.6.0
+# SJF Tesis v2.7.0
 
 App Android para consultar el Semanario Judicial de la Federación.
 
-## Novedades de esta versión (2.6.0)
+## Novedades de esta versión (2.7.0)
+
+### ⬇️ Cada pieza de la tesis, por separado
+- Nueva sección **Descargas** en la ficha de la tesis: la tesis, cada ejecutoria y cada voto se descargan en su propio PDF con un toque
+- **Todo por separado**: un ZIP con cada documento en su propio PDF (la tesis, sus ejecutorias y sus votos)
+- **Expediente completo**: todo en un solo PDF con índice, también desde esta sección
+- Botón de descarga directo en cada tarjeta de **precedente** y de **voto**, sin necesidad de abrirlos
+
+### ✨ Lectura más limpia
+- **División silábica en español**: el texto justificado ya no deja huecos enormes entre palabras en la pantalla del teléfono
+- Las tarjetas de votos muestran el tipo y quién lo formula («Voto paralelo · Ministro Sergio Salvador Aguirre Anguiano») sin repetir el título
+- **Descargas** identifica cada archivo: Tesis, Ejecutoria, Voto, Expediente, Documentos de la tesis o Compilación, con su ícono y su registro
+- Fechas con la forma recomendada: «febrero de 2006» (antes «febrero del 2006»)
+
+## Novedades de la versión 2.6.0
 
 ### 📄 Nuevo generador de PDF
 - Motor PDF propio, escrito desde cero: los archivos pesan una fracción de los del sitio de la SCJN y se generan al instante. Ejemplo, la ejecutoria 19501 (43 páginas): **117 KB en menos de 0.1 s**

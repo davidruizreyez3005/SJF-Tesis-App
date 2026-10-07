@@ -27,23 +27,23 @@ class FechaUtilsTest {
 
     @Test
     fun `formato largo dia de mes del anio`() {
-        assertEquals("26 de enero del 2018", formatDateLong("26 de enero de 2018"))
-        assertEquals("26 de enero del 2018", formatDateLong("26 de enero del 2018"))
-        assertEquals("26 de enero del 2018", formatDateLong("26 de Enero de 2018"))
-        assertEquals("5 de marzo del 2021", formatDateLong("5 de marzo de 2021"))
+        assertEquals("26 de enero de 2018", formatDateLong("26 de enero de 2018"))
+        assertEquals("26 de enero de 2018", formatDateLong("26 de enero del 2018"))
+        assertEquals("26 de enero de 2018", formatDateLong("26 de Enero de 2018"))
+        assertEquals("5 de marzo de 2021", formatDateLong("5 de marzo de 2021"))
     }
 
     @Test
     fun `formato largo desde iso`() {
-        assertEquals("26 de enero del 2018", formatDateLong("2018-01-26"))
-        assertEquals("26 de enero del 2018", formatDateLong("2018-01-26T00:00:00Z"))
-        assertEquals("26 de enero del 2018", formatDateLong("2018/01/26"))
+        assertEquals("26 de enero de 2018", formatDateLong("2018-01-26"))
+        assertEquals("26 de enero de 2018", formatDateLong("2018-01-26T00:00:00Z"))
+        assertEquals("26 de enero de 2018", formatDateLong("2018/01/26"))
     }
 
     @Test
     fun `formato largo desde numerico`() {
-        assertEquals("26 de enero del 2018", formatDateLong("26/01/2018"))
-        assertEquals("26 de enero del 2018", formatDateLong("26-01-2018"))
+        assertEquals("26 de enero de 2018", formatDateLong("26/01/2018"))
+        assertEquals("26 de enero de 2018", formatDateLong("26-01-2018"))
     }
 
     @Test
@@ -51,9 +51,9 @@ class FechaUtilsTest {
         // Regresión v2.2.3: «09/2013» se mostraba crudo en las tarjetas porque
         // ningún patrón lo reconocía. Es mes-año de la API de búsqueda (Gaceta):
         // se interpreta sin fabricar día.
-        assertEquals("septiembre del 2013", formatDateLong("09/2013"))
-        assertEquals("septiembre del 2013", formatDateLong("9-2013"))
-        assertEquals("enero del 2014", formatDateLong("1/2014"))
+        assertEquals("septiembre de 2013", formatDateLong("09/2013"))
+        assertEquals("septiembre de 2013", formatDateLong("9-2013"))
+        assertEquals("enero de 2014", formatDateLong("1/2014"))
     }
 
     @Test
@@ -67,28 +67,28 @@ class FechaUtilsTest {
     fun `casos de la captura del usuario - tarjetas de vista previa`() {
         // Captura 20260827_182717: las tarjetas mostraban «10/01/2014» y
         // «09/2013»; deben verse en el formato «(día) de (mes) del (año)».
-        assertEquals("10 de enero del 2014", formatDateLong("10/01/2014"))
-        assertEquals("septiembre del 2013", formatDateLong("09/2013"))
+        assertEquals("10 de enero de 2014", formatDateLong("10/01/2014"))
+        assertEquals("septiembre de 2013", formatDateLong("09/2013"))
     }
 
     @Test
     fun `formato largo desde epoch`() {
-        assertEquals("26 de enero del 2018", formatDateLong("1516924800000")) // ms
-        assertEquals("1 de febrero del 2015", formatDateLong("1422748800"))   // segundos
+        assertEquals("26 de enero de 2018", formatDateLong("1516924800000")) // ms
+        assertEquals("1 de febrero de 2015", formatDateLong("1422748800"))   // segundos
     }
 
     @Test
     fun `fecha previa a 2001 no se descarta`() {
         // Regresión: el filtro anterior (ms > 1e12) tiraba toda fecha < 2001.
-        assertEquals("15 de enero del 2000", formatDateLong("947894400000"))
-        assertEquals("15 de enero del 2000", formatDateLong("947894400"))
+        assertEquals("15 de enero de 2000", formatDateLong("947894400000"))
+        assertEquals("15 de enero de 2000", formatDateLong("947894400"))
     }
 
     @Test
     fun `solo mes y anio - formato gaceta`() {
-        assertEquals("febrero del 2015", formatDateLong("Febrero de 2015"))
-        assertEquals("febrero del 2015", formatDateLong("febrero del 2015"))
-        assertEquals("septiembre del 1937", formatDateLong("Setiembre de 1937"))
+        assertEquals("febrero de 2015", formatDateLong("Febrero de 2015"))
+        assertEquals("febrero de 2015", formatDateLong("febrero del 2015"))
+        assertEquals("septiembre de 1937", formatDateLong("Setiembre de 1937"))
     }
 
     @Test
@@ -119,13 +119,13 @@ class FechaUtilsTest {
         assertEquals(2, f?.mes)
         assertEquals(2015, f?.anio)
         assertEquals(null, f?.dia)
-        assertEquals("febrero del 2015", f?.legible())
+        assertEquals("febrero de 2015", f?.legible())
     }
 
     @Test
     fun `extrae fecha completa de la publicacion`() {
         val f = extraerFecha("Aprobada por la Primera Sala en sesión de 26 de enero de 2018, por unanimidad")
-        assertEquals("26 de enero del 2018", f?.legible())
+        assertEquals("26 de enero de 2018", f?.legible())
     }
 
     @Test
@@ -137,7 +137,7 @@ class FechaUtilsTest {
     @Test
     fun `prefiere fecha completa sobre mes y anio`() {
         val f = extraerFecha("Tomo I, 15 de marzo de 2016 y Gaceta de abril de 2016")
-        assertEquals("15 de marzo del 2016", f?.legible())
+        assertEquals("15 de marzo de 2016", f?.legible())
     }
 
     // ── Epoch ──

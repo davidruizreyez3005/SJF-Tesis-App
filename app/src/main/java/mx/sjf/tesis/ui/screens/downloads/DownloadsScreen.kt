@@ -1,5 +1,12 @@
 package mx.sjf.tesis.ui.screens.downloads
 
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.RecordVoiceOver
+import androidx.compose.ui.graphics.vector.ImageVector
+import mx.sjf.tesis.data.util.TipoArchivo
+import mx.sjf.tesis.data.util.describirArchivo
 import android.app.Activity
 import android.app.RecoverableSecurityException
 import android.os.Build
@@ -199,6 +206,7 @@ private fun DownloadedFileCard(
     onShare: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val descrito = remember(file.name) { describirArchivo(file.name) }
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -215,7 +223,7 @@ private fun DownloadedFileCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    if (file.mimeType == "application/zip") Icons.Outlined.FolderZip else Icons.Outlined.PictureAsPdf,
+                    iconoDe(descrito.tipo, file.mimeType),
                     contentDescription = null,
                     tint = NavyBg,
                     modifier = Modifier.size(22.dp)
@@ -224,7 +232,13 @@ private fun DownloadedFileCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    file.name,
+                    descrito.tipo.etiqueta,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    descrito.titulo,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
@@ -254,6 +268,15 @@ private fun DownloadedFileCard(
             }
         }
     }
+}
+
+private fun iconoDe(tipo: TipoArchivo, mimeType: String): ImageVector = when (tipo) {
+    TipoArchivo.TESIS -> Icons.Outlined.Description
+    TipoArchivo.EJECUTORIA -> Icons.Outlined.Gavel
+    TipoArchivo.VOTO -> Icons.Outlined.RecordVoiceOver
+    TipoArchivo.EXPEDIENTE, TipoArchivo.COMPILACION -> Icons.AutoMirrored.Outlined.LibraryBooks
+    TipoArchivo.DOCUMENTOS, TipoArchivo.LOTE -> Icons.Outlined.FolderZip
+    TipoArchivo.OTRO -> if (mimeType == "application/zip") Icons.Outlined.FolderZip else Icons.Outlined.PictureAsPdf
 }
 
 /**

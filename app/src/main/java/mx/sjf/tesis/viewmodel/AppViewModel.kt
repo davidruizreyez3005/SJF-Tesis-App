@@ -660,6 +660,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportExpediente(tesis: Tesis) = exportSingle(tesis, expediente = true)
 
+    /**
+     * Todas las piezas de la tesis, cada una en su propio PDF, en un ZIP:
+     * la tesis, cada ejecutoria y cada voto.
+     */
+    fun exportPaquete(tesis: Tesis) =
+        launchExport(listOf(tesis), "Reuniendo los documentos") { ctx, withTexts ->
+            val t = withTexts.first()
+            val (ejecutorias, votos) = relacionadosPara(t, obligatorio = true)
+            val docs = listOf(DocumentosPdf.tesis(t, ejecutorias, votos)) +
+                ejecutorias.map { DocumentosPdf.ejecutoria(it, t) } +
+                votos.map { DocumentosPdf.voto(it, t) }
+            _batchState.value = BatchState.Progress(1, 1, t.rubro, "Generando ${docs.size} PDF")
+            val nombre = DocumentosPdf.tesis(t).nombreArchivo.removeSuffix(".pdf") + "_documentos.zip"
+            val result = withContext(Dispatchers.IO) { PdfExporter.exportZip(ctx, docs, nombre) }
+            _batchState.value = BatchState.Idle
+            notify("${docs.size} PDF guardados en un ZIP", "Abrir", UiAction.OpenFile(result.uri, result.mimeType))
+        }
+
     /** PDF de una ejecutoria (lector de ejecutorias). */
     fun exportEjecutoria(e: Ejecutoria) =
         exportDocumento(DocumentosPdf.ejecutoria(e, _selected.value?.takeIf { e.registro in it.ejecutorias }))

@@ -105,4 +105,14 @@ class PrecedentesTest {
         // Tesis guardadas por versiones anteriores (sin el campo) cargan sin votos.
         assertEquals(emptyList<Long>(), Tesis.fromJson(JSONObject("""{"ius":1,"rubro":"R"}""")).votos)
     }
+
+    @Test
+    fun autorDeVoto_quitaElTipoRepetido() {
+        assertEquals("Ministro Sergio Salvador Aguirre Anguiano", autorDeVoto("Voto paralelo del Ministro Sergio Salvador Aguirre Anguiano"))
+        assertEquals("Ministra Norma Lucía Piña Hernández", autorDeVoto("Voto concurrente que formula la Ministra Norma Lucía Piña Hernández"))
+        assertEquals("Ministro Juan N. Silva Meza", autorDeVoto("Voto particular del Ministro Juan N. Silva Meza"))
+        // Sin el patrón, el título queda intacto.
+        assertEquals("Voto", autorDeVoto("Voto"))
+        assertEquals("Engrose del asunto", autorDeVoto("Engrose del asunto"))
+    }
 }

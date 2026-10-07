@@ -11,6 +11,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.RecordVoiceOver
+import androidx.compose.material3.IconButton
+import mx.sjf.tesis.data.util.autorDeVoto
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -185,7 +189,7 @@ fun DetailSheet(
                     )
                 }
 
-                EjecutoriasSection(ejecutoriasUi, onOpen = vm::abrirEjecutoria, onRetry = vm::retryRelacionados)
+                EjecutoriasSection(ejecutoriasUi, onOpen = vm::abrirEjecutoria, onDownload = vm::exportEjecutoria, onRetry = vm::retryRelacionados)
 
                 if (tesis.precedente.isNotBlank()) {
                     PrecedentesSection(tesis.precedente)
@@ -199,6 +203,14 @@ fun DetailSheet(
                     SectionLabel("Publicación")
                     PublicationBox(publicada, obligatoria)
                 }
+
+                DescargasSection(
+                    tesis = tesis,
+                    ejecutorias = (ejecutoriasUi as? DocumentosUi.Listos)?.documentos.orEmpty(),
+                    votos = (votosUi as? DocumentosUi.Listos)?.documentos.orEmpty(),
+                    habilitado = !isExporting,
+                    vm = vm
+                )
 
                 SectionLabel("Datos de localización")
                 InfoRow("Registro digital", tesis.registro.toString())
@@ -318,6 +330,7 @@ fun DetailSheet(
 private fun EjecutoriasSection(
     ui: DocumentosUi<Ejecutoria>,
     onOpen: (Ejecutoria) -> Unit,
+    onDownload: (Ejecutoria) -> Unit,
     onRetry: () -> Unit
 ) {
     val titulo = { n: Int -> if (n == 1) "Precedente de la tesis" else "Precedentes de la tesis ($n)" }
@@ -363,6 +376,9 @@ private fun EjecutoriasSection(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                        }
+                        IconButton(onClick = { onDownload(e) }) {
+                            Icon(Icons.Outlined.Download, "Descargar la ejecutoria ${e.registro} en PDF", tint = MaterialTheme.colorScheme.primary)
                         }
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowForward,
@@ -493,10 +509,10 @@ private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit, onDownload: (Voto)
             Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
-                .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                 if (voto.tipo.isNotBlank()) {
                     Text(
                         "Voto ${voto.tipo}",
@@ -507,11 +523,14 @@ private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit, onDownload: (Voto)
                     Spacer(Modifier.height(2.dp))
                 }
                 Text(
-                    voto.titulo,
+                    if (voto.tipo.isNotBlank()) autorDeVoto(voto.titulo) else voto.titulo,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = if (expanded) Int.MAX_VALUE else 3,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+            IconButton(onClick = { onDownload(voto) }) {
+                Icon(Icons.Outlined.Download, "Descargar el voto ${voto.registro} en PDF", tint = MaterialTheme.colorScheme.primary)
             }
             Icon(
                 Icons.Outlined.ExpandMore,
@@ -540,21 +559,88 @@ private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit, onDownload: (Voto)
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TextButton(onClick = { onDownload(voto) }, contentPadding = PaddingValues(0.dp)) {
-                        Icon(Icons.Outlined.Download, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Descargar PDF")
-                    }
-                    TextButton(onClick = { onOpenUrl(voto.urlDetalle) }, contentPadding = PaddingValues(0.dp)) {
-                        Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Sitio oficial")
-                    }
+                TextButton(onClick = { onOpenUrl(voto.urlDetalle) }, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Ver el voto en el sitio oficial")
                 }
             }
         }
+    }
+}
+
+/**
+ * Cada pieza de la tesis se descarga por separado: la tesis, cada
+ * ejecutoria, cada voto; además el expediente (todo en un PDF con índice) y
+ * un ZIP con cada pieza en su propio PDF.
+ */
+@Composable
+private fun DescargasSection(
+    tesis: Tesis,
+    ejecutorias: List<Ejecutoria>,
+    votos: List<Voto>,
+    habilitado: Boolean,
+    vm: AppViewModel
+) {
+    val conRelacionados = tesis.ejecutorias.isNotEmpty() || tesis.votos.isNotEmpty()
+    SectionLabel("Descargas")
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+    ) {
+        val filas = buildList {
+            add(Descarga("Tesis", tesis.clave.ifBlank { "Registro digital ${tesis.registro}" }, Icons.Outlined.Description) { vm.exportSingle(tesis) })
+            ejecutorias.forEach { e ->
+                add(Descarga("Ejecutoria ${e.registro}", e.asunto.ifBlank { "Precedente de la tesis" }, Icons.Outlined.Gavel) { vm.exportEjecutoria(e) })
+            }
+            votos.forEach { v ->
+                val titulo = if (v.tipo.isNotBlank()) "Voto ${v.tipo}" else "Voto ${v.registro}"
+                add(Descarga(titulo, autorDeVoto(v.titulo), Icons.Outlined.RecordVoiceOver) { vm.exportVoto(v) })
+            }
+            if (conRelacionados) {
+                add(Descarga("Expediente completo", "Todo en un solo PDF, con índice", Icons.AutoMirrored.Outlined.LibraryBooks) { vm.exportExpediente(tesis) })
+                add(Descarga("Todo por separado", "Un ZIP con cada documento en su propio PDF", Icons.Outlined.FolderZip) { vm.exportPaquete(tesis) })
+            }
+        }
+        filas.forEachIndexed { i, f ->
+            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            DescargaFila(f.titulo, f.detalle, f.icono, habilitado, f.accion)
+        }
+    }
+}
+
+private class Descarga(val titulo: String, val detalle: String, val icono: ImageVector, val accion: () -> Unit)
+
+@Composable
+private fun DescargaFila(titulo: String, detalle: String, icono: ImageVector, habilitado: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = habilitado, onClickLabel = "Descargar PDF", onClick = onClick)
+            .padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icono, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(titulo, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                detalle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            Icons.Outlined.Download,
+            null,
+            tint = if (habilitado) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 

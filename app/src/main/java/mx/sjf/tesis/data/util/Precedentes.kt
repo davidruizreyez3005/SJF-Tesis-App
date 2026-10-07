@@ -67,3 +67,18 @@ fun tituloYTipoDeVoto(texto: String): Pair<String, String> {
         .find(primero)?.groupValues?.get(1)?.lowercase() ?: ""
     return titulo to tipo
 }
+
+/**
+ * Quién formula el voto, sin repetir el tipo que ya se muestra aparte:
+ * «Voto paralelo del Ministro Sergio Salvador Aguirre Anguiano» → «Ministro
+ * Sergio Salvador Aguirre Anguiano». Si el título no sigue ese patrón se
+ * devuelve completo.
+ */
+fun autorDeVoto(titulo: String): String {
+    val sinTipo = Regex(
+        """^votos?\s+(?:${TIPOS_VOTO.joinToString("|")})\s+(?:que\s+formulan?\s+)?(?:(?:del|de\s+la|de\s+los|de\s+las|el|la|los|las)\s+)?""",
+        RegexOption.IGNORE_CASE
+    ).replaceFirst(titulo.trim(), "")
+    return if (sinTipo.length < 3 || sinTipo == titulo.trim()) titulo.trim()
+           else sinTipo.replaceFirstChar { it.uppercase() }
+}

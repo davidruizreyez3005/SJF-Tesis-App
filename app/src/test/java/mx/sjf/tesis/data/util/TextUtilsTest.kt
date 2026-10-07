@@ -34,7 +34,7 @@ class TextUtilsTest {
         assertTrue("debe parsear fecha larga es-MX", ts != 0L)
         // Round-trip independiente de la zona horaria del JVM de pruebas.
         // Formato v2.2.2: «(día) de (mes) del (año)».
-        assertEquals("18 de mayo del 2018", formatDateLong("18 de mayo de 2018"))
+        assertEquals("18 de mayo de 2018", formatDateLong("18 de mayo de 2018"))
     }
 
     @Test
@@ -55,7 +55,7 @@ class TextUtilsTest {
 
     @Test
     fun formatDateLong_formateaFechaLarga() {
-        assertEquals("18 de mayo del 2018", formatDateLong("18/05/2018"))
+        assertEquals("18 de mayo de 2018", formatDateLong("18/05/2018"))
     }
 
     @Test

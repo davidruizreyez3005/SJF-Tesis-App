@@ -84,10 +84,10 @@ data class FechaLegible(val dia: Int?, val mes: Int?, val anio: Int) {
             set(anio, (mes ?: 1) - 1, dia ?: 1)
         }.timeInMillis
 
-    /** Forma legible: «26 de enero del 2018» / «enero del 2018» / «2018». */
+    /** Forma legible: «26 de enero de 2018» / «enero de 2018» / «2018». */
     fun legible(): String = when {
-        dia != null && mes != null -> "$dia de ${NOMBRES_MESES[mes - 1]} del $anio"
-        mes != null -> "${NOMBRES_MESES[mes - 1]} del $anio"
+        dia != null && mes != null -> "$dia de ${NOMBRES_MESES[mes - 1]} de $anio"
+        mes != null -> "${NOMBRES_MESES[mes - 1]} de $anio"
         else -> anio.toString()
     }
 
