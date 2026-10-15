@@ -1,8 +1,15 @@
-# SJF Tesis v2.7.0
+# SJF Tesis v2.7.1
 
 App Android para consultar el Semanario Judicial de la Federación.
 
-## Novedades de esta versión (2.7.0)
+## Novedades de esta versión (2.7.1)
+
+### ↩️ Botón «Atrás»
+- Ya no cierra la app desde los resultados de una búsqueda: primero regresa a la pantalla de inicio
+- En la pantalla de inicio pide confirmación («Presiona atrás otra vez para salir») antes de cerrar la app
+- Se mantiene el orden: cierra la tesis o el lector abiertos, sale del modo selección y regresa a «Buscar» desde las demás pestañas
+
+## Novedades de la versión 2.7.0
 
 ### ⬇️ Cada pieza de la tesis, por separado
 - Nueva sección **Descargas** en la ficha de la tesis: la tesis, cada ejecutoria y cada voto se descargan en su propio PDF con un toque

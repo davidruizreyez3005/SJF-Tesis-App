@@ -87,6 +87,7 @@ import mx.sjf.tesis.ui.screens.settings.SettingsScreen
 import mx.sjf.tesis.ui.theme.Gold
 import mx.sjf.tesis.viewmodel.AppViewModel
 import mx.sjf.tesis.viewmodel.UiAction
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private data class NavItem(val icon: ImageVector, val selectedIcon: ImageVector, val label: String)
@@ -101,6 +102,9 @@ private val navItems = listOf(
     NavItem(Icons.Outlined.History, Icons.Filled.History, "Historial"),
     NavItem(Icons.Outlined.Settings, Icons.Filled.Settings, "Ajustes")
 )
+
+/** Tiempo para confirmar la salida con un segundo «atrás». */
+private const val SALIDA_MS = 2_500L
 
 @Composable
 fun SjfApp(vm: AppViewModel) {
@@ -164,10 +168,31 @@ fun SjfApp(vm: AppViewModel) {
         }
     }
 
-    // Atrás: primero sale del modo selección, después vuelve a «Buscar».
-    // Las hojas modales manejan su propio «atrás».
+    // Atrás, de lo más particular a lo más general (las hojas y diálogos
+    // abiertos manejan su propio «atrás» antes que todo esto):
+    //  1. modo selección → lo cierra;
+    //  2. otra pestaña → vuelve a «Buscar»;
+    //  3. resultados de una búsqueda → vuelve a la pantalla de inicio;
+    //  4. inicio → pide confirmación; un segundo «atrás» sale de la app.
+    val enResultados = tab == TAB_SEARCH && !searchState.selectionMode &&
+        (searchState.searched || searchState.query.isNotBlank())
+    val enInicio = tab == TAB_SEARCH && !searchState.selectionMode && !enResultados
+    var salidaPendiente by remember { mutableStateOf(false) }
+    LaunchedEffect(salidaPendiente) {
+        if (salidaPendiente) { delay(SALIDA_MS); salidaPendiente = false }
+    }
     BackHandler(enabled = searchState.selectionMode) { vm.exitSelection() }
     BackHandler(enabled = !searchState.selectionMode && tab != TAB_SEARCH) { selectTab(TAB_SEARCH) }
+    BackHandler(enabled = enResultados) {
+        focusManager.clearFocus()
+        vm.volverAlInicio()
+    }
+    // Con la salida pendiente este manejador se apaga y el «atrás» siguiente
+    // llega al sistema, que cierra la app.
+    BackHandler(enabled = enInicio && !salidaPendiente) {
+        salidaPendiente = true
+        vm.notify("Presiona atrás otra vez para salir")
+    }
 
     // Los Snackbars se dibujan en la superficie más alta: una hoja modal
     // abierta taparía el host del Scaffold.

@@ -17,8 +17,8 @@ android {
         applicationId = "mx.sjf.tesis"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "2.7.0"
+        versionCode = 14
+        versionName = "2.7.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -46,6 +46,10 @@ android {
         buildConfig = true
     }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
+    // Robolectric necesita los recursos de Android para las pruebas de navegación.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -71,4 +75,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // org.json real para pruebas JVM (el android.jar solo trae stubs).
     testImplementation("org.json:json:20240303")
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
