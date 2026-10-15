@@ -78,7 +78,7 @@ import mx.sjf.tesis.ui.screens.batch.BatchActionSheet
 import mx.sjf.tesis.ui.screens.citation.CitationDialog
 import mx.sjf.tesis.ui.screens.debug.DebugPanel
 import mx.sjf.tesis.ui.screens.detail.DetailSheet
-import mx.sjf.tesis.ui.screens.ejecutoria.EjecutoriaReader
+import mx.sjf.tesis.ui.screens.lector.LectorDocumento
 import mx.sjf.tesis.ui.screens.downloads.DownloadsScreen
 import mx.sjf.tesis.ui.screens.history.HistoryScreen
 import mx.sjf.tesis.ui.screens.saved.SavedScreen
@@ -152,6 +152,8 @@ fun SjfApp(vm: AppViewModel) {
             }
         }
     }
+
+    LaunchedEffect(Unit) { vm.irABuscar.collect { selectTab(TAB_SEARCH) } }
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg ->
@@ -279,13 +281,14 @@ fun SjfApp(vm: AppViewModel) {
         )
     }
 
-    // Lector de ejecutorias («Precedente(s) de la tesis»), sobre la hoja de detalle.
-    lectura?.let { e ->
-        EjecutoriaReader(
-            ejecutoria = e,
+    // Lector de ejecutorias y votos, sobre la hoja de detalle.
+    lectura?.let { l ->
+        LectorDocumento(
+            lectura = l,
             exportando = batchState is BatchState.Progress,
-            onDismiss = vm::cerrarEjecutoria,
-            onDownload = { vm.exportEjecutoria(e) },
+            onDismiss = vm::cerrarLectura,
+            onDownload = vm::exportLectura,
+            onRetry = vm::reintentarLectura,
             snackbarHost = { if (host == "reader") snackbarSlot() }
         )
     }

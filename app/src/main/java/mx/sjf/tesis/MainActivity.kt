@@ -1,10 +1,12 @@
 package mx.sjf.tesis
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.viewModels
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -17,13 +19,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import mx.sjf.tesis.data.model.ThemeMode
+import mx.sjf.tesis.data.util.enlaceSjf
 import mx.sjf.tesis.ui.navigation.SjfApp
 import mx.sjf.tesis.ui.theme.SjfTheme
 import mx.sjf.tesis.viewmodel.AppViewModel
 
 class MainActivity : ComponentActivity() {
+
+    private val vm: AppViewModel by viewModels()
 
     // Registro de permiso de escritura para Android 9 y anteriores.
     // Android 10+ usa MediaStore y no requiere este permiso.
@@ -41,8 +45,10 @@ class MainActivity : ComponentActivity() {
         // Solicitar permiso de escritura en Android 9 y anteriores al iniciar.
         requestStoragePermissionIfNeeded()
 
+        // Al recrearse (p. ej. al girar) el enlace ya se atendió.
+        if (savedInstanceState == null) atenderEnlace(intent)
+
         setContent {
-            val vm: AppViewModel = viewModel()
             val settings by vm.settings.collectAsState()
             val dark = when (settings.themeMode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
@@ -62,6 +68,28 @@ class MainActivity : ComponentActivity() {
                     SjfApp(vm)
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        atenderEnlace(intent)
+    }
+
+    /**
+     * Un enlace del Semanario (abierto o compartido) muestra su documento.
+     * Otro texto compartido se busca.
+     */
+    private fun atenderEnlace(intent: Intent?) {
+        val texto = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.dataString
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+            else -> null
+        }?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val enlace = enlaceSjf(texto)
+        when {
+            enlace != null -> vm.abrirEnlace(enlace)
+            intent?.action == Intent.ACTION_SEND -> vm.buscarTextoCompartido(texto)
         }
     }
 

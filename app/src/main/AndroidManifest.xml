@@ -22,11 +22,44 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.SJFTesis">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Enlaces del Semanario: sjf2.scjn.gob.mx/detalle/{tesis|ejecutoria|voto}/{registro}.
+                 La SCJN no verifica la app, así que en Android 12+ el usuario los
+                 habilita una vez en «Abrir de forma predeterminada» (ver Ajustes). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="sjf2.scjn.gob.mx" />
+                <data android:pathPrefix="/detalle/" />
+            </intent-filter>
+
+            <!-- Enlaces del sistema anterior (DetalleGeneralV2.aspx?ID=…&Clase=…). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="sjf.scjn.gob.mx" />
+                <data android:pathPrefix="/SJFSist/" />
+            </intent-filter>
+
+            <!-- «Compartir» desde el navegador u otra app: un enlace abre el
+                 documento; cualquier otro texto se busca. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 

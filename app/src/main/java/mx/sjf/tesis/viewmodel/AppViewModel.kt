@@ -14,6 +14,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import mx.sjf.tesis.data.local.DocumentosLocales
+import java.io.File
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -36,6 +42,8 @@ import mx.sjf.tesis.data.util.countOccurrences
 import mx.sjf.tesis.data.util.foldAccents
 import mx.sjf.tesis.data.util.parseFecha
 import mx.sjf.tesis.data.util.tipoGrupo
+import mx.sjf.tesis.data.util.EnlaceSjf
+import mx.sjf.tesis.data.util.enlaceSjf
 import mx.sjf.tesis.pdf.DocumentoPdf
 import mx.sjf.tesis.pdf.DocumentosPdf
 import java.text.SimpleDateFormat
@@ -63,6 +71,30 @@ enum class MateriaFilter(val label: String, val materia: String?) {
     PENAL("Penal", "Penal"),
     CIVIL("Civil", "Civil"),
     LABORAL("Laboral", "Laboral")
+}
+
+enum class TipoDocumento(val nombre: String, val ruta: String) {
+    EJECUTORIA("Ejecutoria", "ejecutoria"),
+    VOTO("Voto", "voto")
+}
+
+/** Lo que muestra el lector de documentos: una ejecutoria, un voto, o su descarga. */
+sealed interface Lectura {
+    val tipo: TipoDocumento
+    val registro: Long
+    val url: String get() = "https://sjf2.scjn.gob.mx/detalle/${tipo.ruta}/$registro"
+
+    data class DeEjecutoria(val ejecutoria: Ejecutoria) : Lectura {
+        override val tipo get() = TipoDocumento.EJECUTORIA
+        override val registro get() = ejecutoria.registro
+    }
+    data class DeVoto(val voto: Voto) : Lectura {
+        override val tipo get() = TipoDocumento.VOTO
+        override val registro get() = voto.registro
+    }
+    /** Se descarga el documento de un enlace. */
+    data class Cargando(override val tipo: TipoDocumento, override val registro: Long) : Lectura
+    data class Fallo(override val tipo: TipoDocumento, override val registro: Long) : Lectura
 }
 
 /** Estado de los documentos relacionados (votos, ejecutorias) de la tesis abierta. */
@@ -117,6 +149,14 @@ data class SearchState(
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = Store(app)
+
+    /** Ejecutorias y votos de las tesis guardadas, para leerlos sin conexión. */
+    private val documentos = DocumentosLocales(File(app.filesDir, "documentos"))
+    /** Las descargas para leer sin conexión van de una en una (el firewall de la SCJN castiga las ráfagas). */
+    private val sincronizacion = Mutex()
+    private val _sinConexion = MutableStateFlow<Set<Long>>(emptySet())
+    /** Registros de las tesis guardadas cuyos precedentes y votos ya están en el teléfono. */
+    val sinConexion = _sinConexion.asStateFlow()
     val settings = store.settingsFlow
     val saved = store.savedFlow
     val history = store.historyFlow
@@ -142,7 +182,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val ejecutorias = _ejecutorias.asStateFlow()
 
     /** Ejecutoria abierta en el lector de pantalla completa. */
-    private val _lectura = MutableStateFlow<Ejecutoria?>(null)
+    private val _lectura = MutableStateFlow<Lectura?>(null)
     val lectura = _lectura.asStateFlow()
 
     // True si la última carga del detalle falló por red (no por falta de texto).
@@ -170,6 +210,61 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // La sesión se abre en segundo plano para que ya esté lista cuando el
         // usuario abra su primera tesis (ver SjfApi.warmUp).
         if (store.settings.value.apiDirect) viewModelScope.launch { SjfApi.warmUp() }
+        SjfApi.almacen = documentos
+        viewModelScope.launch { prepararGuardadas() }
+    }
+
+    // ── Lectura sin conexión de las tesis guardadas ──
+
+    private fun completa(t: Tesis) =
+        t.ejecutorias.all(documentos::tieneEjecutoria) && t.votos.all(documentos::tieneVoto)
+
+    private fun esGuardada(t: Tesis) = saved.value.any { it.registro == t.registro }
+
+    /**
+     * Al iniciar: borra los documentos de tesis que ya no están guardadas
+     * (se hace aquí y no al quitarla, para que «Deshacer» no pierda nada) y
+     * completa, en segundo plano, las guardadas antes de esta versión.
+     */
+    private suspend fun prepararGuardadas() {
+        val guardadas = saved.value
+        withContext(Dispatchers.IO) {
+            documentos.conservarSolo(
+                guardadas.flatMap { it.ejecutorias }.toSet(),
+                guardadas.flatMap { it.votos }.toSet()
+            )
+            _sinConexion.value = guardadas.filter(::completa).map { it.registro }.toSet()
+        }
+        if (!settings.value.apiDirect) return
+        delay(8_000)   // deja pasar la primera búsqueda del usuario
+        guardadas.filterNot(::completa).forEach { descargarParaSinConexion(it) }
+    }
+
+    /** Descarga y guarda en el teléfono los precedentes y votos de una tesis guardada. */
+    private suspend fun descargarParaSinConexion(t: Tesis) = sincronizacion.withLock {
+        if (!esGuardada(t)) return@withLock
+        withContext(Dispatchers.IO) {
+            if (!completa(t) && settings.value.apiDirect) {
+                runCatching {
+                    SjfApi.ejecutorias(t).forEach(documentos::guardar)
+                    SjfApi.votos(t).forEach(documentos::guardar)
+                }.onFailure { NetLog.log("Sin conexión: ${t.registro} ✗ ${it.message}") }
+            }
+            if (completa(t)) _sinConexion.update { it + t.registro }
+        }
+    }
+
+    /** Espacio que ocupan los documentos guardados para leer sin conexión. */
+    fun espacioSinConexion(): Long = documentos.tamano()
+
+    /** Guarda lo que ya se descargó al abrir una tesis guardada. */
+    private suspend fun conservar(t: Tesis, ejecutorias: List<Ejecutoria>, votos: List<Voto>) {
+        if (!esGuardada(t)) return
+        withContext(Dispatchers.IO) {
+            ejecutorias.forEach(documentos::guardar)
+            votos.forEach(documentos::guardar)
+            if (completa(t)) _sinConexion.update { it + t.registro }
+        }
     }
 
     fun notify(text: String, actionLabel: String? = null, action: UiAction? = null) {
@@ -203,6 +298,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun search(query: String? = null) {
         val q = (query ?: _search.value.query).trim()
+        // Un enlace del Semanario pegado en el buscador abre el documento.
+        enlaceSjf(q)?.let { enlace ->
+            _search.value = _search.value.copy(query = "")
+            abrirEnlace(enlace)
+            return
+        }
         lanzarBusqueda(q)
         // Solo agregamos al historial si el usuario escribió algo —
         // una búsqueda vacía no deja rastro en el historial.
@@ -406,20 +507,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadRelacionados(tesis: Tesis) {
         relacionadosJob?.cancel()
         val enLinea = settings.value.apiDirect
-        _ejecutorias.value = if (tesis.ejecutorias.isEmpty() || !enLinea) DocumentosUi.Ninguno
-                             else DocumentosUi.Cargando(tesis.ejecutorias.size)
-        _votos.value = if (tesis.votos.isEmpty() || !enLinea) DocumentosUi.Ninguno
-                       else DocumentosUi.Cargando(tesis.votos.size)
+        // Sin la API, solo se muestra lo que ya está guardado en el teléfono.
+        val hayEjecutorias = tesis.ejecutorias.isNotEmpty() &&
+            (enLinea || tesis.ejecutorias.all(documentos::tieneEjecutoria))
+        val hayVotos = tesis.votos.isNotEmpty() && (enLinea || tesis.votos.all(documentos::tieneVoto))
+        _ejecutorias.value = if (hayEjecutorias) DocumentosUi.Cargando(tesis.ejecutorias.size) else DocumentosUi.Ninguno
+        _votos.value = if (hayVotos) DocumentosUi.Cargando(tesis.votos.size) else DocumentosUi.Ninguno
         if (_ejecutorias.value == DocumentosUi.Ninguno && _votos.value == DocumentosUi.Ninguno) return
         relacionadosJob = viewModelScope.launch {
-            if (tesis.ejecutorias.isNotEmpty() && enLinea) {
+            if (hayEjecutorias) {
                 val r = cargar(tesis.ejecutorias.size, "Ejecutorias") { SjfApi.ejecutorias(tesis) }
                 if (_selected.value?.registro == tesis.registro) _ejecutorias.value = r
             }
-            if (tesis.votos.isNotEmpty() && enLinea) {
+            if (hayVotos) {
                 val r = cargar(tesis.votos.size, "Votos") { SjfApi.votos(tesis) }
                 if (_selected.value?.registro == tesis.registro) _votos.value = r
             }
+            conservar(
+                tesis,
+                (_ejecutorias.value as? DocumentosUi.Listos)?.documentos.orEmpty(),
+                (_votos.value as? DocumentosUi.Listos)?.documentos.orEmpty()
+            )
         }
     }
 
@@ -445,15 +553,110 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _lectura.value = null
     }
 
-    fun abrirEjecutoria(e: Ejecutoria) { _lectura.value = e }
-    fun cerrarEjecutoria() { _lectura.value = null }
+    private var lecturaJob: Job? = null
+
+    fun abrirEjecutoria(e: Ejecutoria) { _lectura.value = Lectura.DeEjecutoria(e) }
+
+    fun cerrarLectura() {
+        lecturaJob?.cancel()
+        _lectura.value = null
+    }
+
+    /** Descarga del lector según lo que muestra. */
+    fun exportLectura() {
+        when (val l = _lectura.value) {
+            is Lectura.DeEjecutoria -> exportEjecutoria(l.ejecutoria)
+            is Lectura.DeVoto -> exportVoto(l.voto)
+            else -> Unit
+        }
+    }
+
+    // ── Enlaces del Semanario (abiertos desde otra app o pegados en el buscador) ──
+
+    /**
+     * Abre el documento de un enlace de sjf2.scjn.gob.mx (o del sistema
+     * anterior). Una tesis abre su ficha; una ejecutoria o un voto, el lector.
+     */
+    fun abrirEnlace(enlace: EnlaceSjf) {
+        when (enlace) {
+            is EnlaceSjf.DeTesis -> {
+                cerrarLectura()
+                openDetail(saved.value.firstOrNull { it.registro == enlace.registro } ?: Tesis(registro = enlace.registro))
+            }
+            is EnlaceSjf.DeEjecutoria -> cargarLectura(TipoDocumento.EJECUTORIA, enlace.registro)
+            is EnlaceSjf.DeVoto -> cargarLectura(TipoDocumento.VOTO, enlace.registro)
+        }
+    }
+
+    private val _irABuscar = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** Pide a la interfaz mostrar la pestaña «Buscar». */
+    val irABuscar = _irABuscar.asSharedFlow()
+
+    /** Texto compartido desde otra app (sin enlace del Semanario): se busca. */
+    fun buscarTextoCompartido(texto: String) {
+        closeDetail()
+        exitSelection()
+        cerrarLectura()
+        updateQuery(texto.replace(Regex("\\s+"), " ").take(200))
+        search()
+        _irABuscar.tryEmit(Unit)
+    }
+
+    fun reintentarLectura() {
+        val l = _lectura.value ?: return
+        cargarLectura(l.tipo, l.registro)
+    }
+
+    private fun cargarLectura(tipo: TipoDocumento, registro: Long) {
+        lecturaJob?.cancel()
+        _lectura.value = Lectura.Cargando(tipo, registro)
+        val local = when (tipo) {
+            TipoDocumento.EJECUTORIA -> documentos.tieneEjecutoria(registro)
+            TipoDocumento.VOTO -> documentos.tieneVoto(registro)
+        }
+        // Sin la API solo se abre lo que ya está en el teléfono.
+        if (!local && !settings.value.apiDirect) {
+            _lectura.value = Lectura.Fallo(tipo, registro)
+            return
+        }
+        lecturaJob = viewModelScope.launch {
+            _lectura.value = try {
+                when (tipo) {
+                    TipoDocumento.EJECUTORIA -> Lectura.DeEjecutoria(SjfApi.ejecutoria(registro))
+                    TipoDocumento.VOTO -> Lectura.DeVoto(SjfApi.voto(registro))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                NetLog.log("Enlace ${tipo.nombre} $registro ✗ ${e.message}")
+                Lectura.Fallo(tipo, registro)
+            }
+        }
+    }
 
     // ── Guardadas ──
     fun toggleSaved(tesis: Tesis) {
         val index = saved.value.indexOfFirst { it.registro == tesis.registro }
         val nowSaved = store.toggleSaved(tesis)
-        if (nowSaved) notify("Tesis guardada")
+        if (nowSaved) {
+            notify("Tesis guardada")
+            prepararSinConexion(saved.value.firstOrNull { it.registro == tesis.registro } ?: tesis)
+        }
         else notify("Tesis quitada de Guardadas", "Deshacer", UiAction.Undo { store.restoreSaved(tesis, index) })
+    }
+
+    private fun prepararSinConexion(t: Tesis) {
+        viewModelScope.launch {
+            // Con la tesis abierta, lo ya cargado se guarda sin volver a pedirlo.
+            if (_selected.value?.registro == t.registro) {
+                conservar(
+                    t,
+                    (_ejecutorias.value as? DocumentosUi.Listos)?.documentos.orEmpty(),
+                    (_votos.value as? DocumentosUi.Listos)?.documentos.orEmpty()
+                )
+            }
+            descargarParaSinConexion(t)
+        }
     }
 
     fun clearSaved() {
@@ -590,7 +793,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Las tesis exportadas se conservan en Guardadas para consultarlas sin red. */
     private fun autoSave(tesis: List<Tesis>) {
         val existing = saved.value.map { it.registro }.toSet()
-        tesis.filter { it.registro !in existing }.forEach { store.toggleSaved(it) }
+        tesis.filter { it.registro !in existing }.forEach {
+            store.toggleSaved(it)
+            prepararSinConexion(it)
+        }
     }
 
     private fun sinTextoSuffix(tesis: List<Tesis>): String {

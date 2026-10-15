@@ -1,5 +1,9 @@
 package mx.sjf.tesis.ui.screens.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
@@ -37,7 +41,10 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +84,7 @@ private enum class ClearTarget { HISTORY, SAVED }
 @Composable
 fun SettingsScreen(vm: AppViewModel, debugContent: @Composable () -> Unit) {
     val settings by vm.settings.collectAsState()
+    val context = LocalContext.current
     val searchState by vm.search.collectAsState()
     val diagnostic by vm.diagnostic.collectAsState()
     val running by vm.diagnosticRunning.collectAsState()
@@ -182,7 +190,57 @@ fun SettingsScreen(vm: AppViewModel, debugContent: @Composable () -> Unit) {
 
         item {
             SettingsCard {
+                CardTitle(Icons.Outlined.Link, "Enlaces del Semanario")
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Los enlaces de sjf2.scjn.gob.mx que toques en WhatsApp, el correo o un documento " +
+                        "pueden abrirse directo en la app. También puedes compartir un enlace con " +
+                        "«SJF Tesis» o pegarlo en el buscador.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Text(
+                        "En «Abrir de forma predeterminada», toca «Agregar vínculo» y activa sjf2.scjn.gob.mx.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(onClick = {
+                        val intent = Intent(
+                            Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        runCatching { context.startActivity(intent) }.onFailure {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+                                )
+                            }
+                        }
+                    }) { Text("Abrir enlaces en la app") }
+                } else {
+                    Text(
+                        "Al tocar un enlace, elige «SJF Tesis» y «Siempre».",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsCard {
                 CardTitle(Icons.Outlined.Delete, "Datos")
+                Spacer(Modifier.height(6.dp))
+                val espacio = remember(saved) { vm.espacioSinConexion() }
+                Text(
+                    "Las tesis guardadas se leen sin conexión, junto con sus precedentes y votos" +
+                        if (espacio > 0) " (${formatoTamano(espacio)} en el teléfono)." else ".",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(14.dp))
                 DangerTextButton("Borrar historial (${history.size})") {
                     if (history.isNotEmpty()) confirm = ClearTarget.HISTORY
@@ -301,4 +359,9 @@ private fun CardTitle(icon: ImageVector, title: String) {
         Spacer(Modifier.width(10.dp))
         Text(title, style = MaterialTheme.typography.titleMedium)
     }
+}
+
+private fun formatoTamano(bytes: Long): String = when {
+    bytes >= 1_048_576 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1_048_576.0)
+    else -> "${(bytes + 1023) / 1024} KB"
 }

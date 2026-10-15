@@ -142,6 +142,20 @@ data class Voto(
 ) {
     val urlDetalle: String
         get() = "https://sjf2.scjn.gob.mx/detalle/voto/$registro"
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("registro", registro).put("titulo", titulo).put("tipo", tipo)
+        .put("texto", texto).put("publicacion", publicacion)
+
+    companion object {
+        fun fromJson(o: JSONObject) = Voto(
+            registro = o.getLong("registro"),
+            titulo = o.optString("titulo"),
+            tipo = o.optString("tipo"),
+            texto = o.optString("texto"),
+            publicacion = o.optString("publicacion")
+        )
+    }
 }
 
 /**
@@ -164,6 +178,28 @@ data class Ejecutoria(
 ) {
     val urlDetalle: String
         get() = "https://sjf2.scjn.gob.mx/detalle/ejecutoria/$registro"
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("registro", registro).put("asunto", asunto).put("rubro", rubro)
+        .put("epoca", epoca).put("instancia", instancia).put("fuente", fuente)
+        .put("volumen", volumen).put("tomo", tomo).put("pagina", pagina)
+        .put("publicacion", publicacion).put("texto", texto)
+
+    companion object {
+        fun fromJson(o: JSONObject) = Ejecutoria(
+            registro = o.getLong("registro"),
+            asunto = o.optString("asunto"),
+            rubro = o.optString("rubro"),
+            epoca = o.optString("epoca"),
+            instancia = o.optString("instancia"),
+            fuente = o.optString("fuente"),
+            volumen = o.optString("volumen"),
+            tomo = o.optString("tomo"),
+            pagina = o.optString("pagina"),
+            publicacion = o.optString("publicacion"),
+            texto = o.optString("texto")
+        )
+    }
 
     /**
      * Localización como la muestra el Semanario en «Precedente(s) de la tesis»:

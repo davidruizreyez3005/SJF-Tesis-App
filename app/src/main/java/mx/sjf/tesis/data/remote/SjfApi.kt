@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import mx.sjf.tesis.core.Constants
 import mx.sjf.tesis.core.NetLog
+import mx.sjf.tesis.data.local.DocumentosLocales
 import mx.sjf.tesis.data.model.SearchResponse
 import mx.sjf.tesis.data.model.Tesis
 import mx.sjf.tesis.data.model.Ejecutoria
@@ -648,6 +649,13 @@ object SjfApi {
     private const val EJECUTORIAS_BASE =
         "https://sjf2.scjn.gob.mx/services/sjfejecutoriamicroservice/api/public/ejecutorias/%IUS%"
 
+    /**
+     * Documentos guardados en el teléfono (los de las tesis guardadas). Se
+     * consultan antes que la red: así se leen sin conexión y sin gastar
+     * peticiones al servidor de la SCJN.
+     */
+    @Volatile var almacen: DocumentosLocales? = null
+
     private val votoCache = ConcurrentHashMap<Long, Voto>()
 
     /** Ejecutorias recientes (LRU 12): sus textos pueden pasar de 150 000 caracteres. */
@@ -667,9 +675,16 @@ object SjfApi {
      * Votos publicados con una tesis, en el orden en que los lista la SCJN.
      * Se piden uno tras otro (no en ráfaga) para no provocar al firewall.
      */
-    suspend fun votos(tesis: Tesis): List<Voto> = tesis.votos.map { id ->
-        votoCache[id] ?: run {
-            val json = documento(VOTOS_BASE, id, esDeGaceta(tesis), tesis.urlDetalle, "Voto")
+    suspend fun votos(tesis: Tesis): List<Voto> =
+        tesis.votos.map { voto(it, esDeGaceta(tesis), tesis.urlDetalle) }
+
+    /**
+     * Un voto por su registro digital. Sin la tesis (p. ej. desde un enlace)
+     * no se sabe la edición: [documento] prueba las dos.
+     */
+    suspend fun voto(id: Long, gaceta: Boolean = false, referer: String = "https://sjf2.scjn.gob.mx/detalle/voto/$id"): Voto =
+        votoCache[id] ?: almacen?.voto(id)?.also { votoCache[id] = it } ?: run {
+            val json = documento(VOTOS_BASE, id, gaceta, referer, "Voto")
             val texto = json.texto("texto")
             val (titulo, tipo) = tituloYTipoDeVoto(texto)
             Voto(
@@ -680,15 +695,18 @@ object SjfApi {
                 publicacion = limpiarHtml(json.texto("textoPublicacion")).trim()
             ).also { votoCache[id] = it }
         }
-    }
 
     /**
      * Ejecutorias de las que deriva una tesis («Precedente(s) de la tesis» en
      * el Semanario), en el orden de la SCJN, con su texto completo.
      */
-    suspend fun ejecutorias(tesis: Tesis): List<Ejecutoria> = tesis.ejecutorias.map { id ->
-        synchronized(ejecutoriaCache) { ejecutoriaCache[id] } ?: run {
-            val json = documento(EJECUTORIAS_BASE, id, esDeGaceta(tesis), tesis.urlDetalle, "Ejecutoria")
+    suspend fun ejecutorias(tesis: Tesis): List<Ejecutoria> =
+        tesis.ejecutorias.map { ejecutoria(it, esDeGaceta(tesis), tesis.urlDetalle) }
+
+    /** Una ejecutoria por su registro digital (ver [voto]). */
+    suspend fun ejecutoria(id: Long, gaceta: Boolean = false, referer: String = "https://sjf2.scjn.gob.mx/detalle/ejecutoria/$id"): Ejecutoria =
+        synchronized(ejecutoriaCache) { ejecutoriaCache[id] } ?: almacen?.ejecutoria(id) ?: run {
+            val json = documento(EJECUTORIAS_BASE, id, gaceta, referer, "Ejecutoria")
             Ejecutoria(
                 registro = id,
                 asunto = json.texto("tipoAsunto").trim().trimEnd('.').let(::tipoAsuntoLegible),
@@ -703,7 +721,6 @@ object SjfApi {
                 texto = json.texto("texto")
             ).also { synchronized(ejecutoriaCache) { ejecutoriaCache[id] = it } }
         }
-    }
 
     /**
      * «AMPARO DIRECTO EN REVISIÓN 6627/2025» → «Amparo directo en revisión

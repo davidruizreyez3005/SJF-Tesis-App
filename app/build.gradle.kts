@@ -17,8 +17,8 @@ android {
         applicationId = "mx.sjf.tesis"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "2.7.1"
+        versionCode = 15
+        versionName = "2.8.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -35,7 +35,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: quita el código y los recursos que la app no usa (sobre todo
+            // los miles de íconos de material-icons-extended). Ver proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }

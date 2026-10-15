@@ -11,6 +11,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.OfflinePin
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material3.IconButton
@@ -113,6 +114,7 @@ fun DetailSheet(
     val detailError by vm.detailError.collectAsState()
     val votosUi by vm.votos.collectAsState()
     val ejecutoriasUi by vm.ejecutorias.collectAsState()
+    val sinConexion by vm.sinConexion.collectAsState()
     val isSaved = saved.any { it.registro == tesis.registro }
     val isExporting = batchState is BatchState.Progress
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -163,6 +165,19 @@ fun DetailSheet(
                     tipo = tesis.tipo,
                     materia = tesis.materia
                 )
+                if (isSaved && tesis.registro in sinConexion) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.OfflinePin, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (tesis.ejecutorias.isEmpty() && tesis.votos.isEmpty()) "Disponible sin conexión"
+                            else "Disponible sin conexión, con sus precedentes y votos",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 SectionLabel("Texto")
                 when {

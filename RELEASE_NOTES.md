@@ -1,8 +1,26 @@
-# SJF Tesis v2.7.1
+# SJF Tesis v2.8.0
 
 App Android para consultar el Semanario Judicial de la Federación.
 
-## Novedades de esta versión (2.7.1)
+## Novedades de esta versión (2.8.0)
+
+### 🔗 Enlaces del Semanario
+- Los enlaces de **sjf2.scjn.gob.mx** (tesis, ejecutorias y votos) se abren directo en la app, también los del sistema anterior (*DetalleGeneralV2.aspx*), comunes en demandas y sentencias
+- **Compartir → SJF Tesis** desde el navegador o WhatsApp abre el documento; si lo compartido es texto sin enlace, se busca
+- Pegar un enlace en el buscador también abre el documento
+- Ejecutorias y votos abiertos desde un enlace se leen en el lector, con descarga en PDF
+- En Android 12 o más reciente, actívalo una sola vez en *Ajustes › Enlaces del Semanario › Abrir enlaces en la app*
+
+### 📴 Tesis guardadas sin conexión
+- Al guardar una tesis también se guardan en el teléfono sus **precedentes (ejecutorias) y votos**: se leen y se descargan en PDF sin internet, por ejemplo en audiencia
+- La ficha indica «Disponible sin conexión»
+- Las tesis guardadas con versiones anteriores se completan solas en segundo plano
+- *Ajustes › Datos* muestra cuánto espacio ocupan
+
+### ⚡ App más ligera
+- La APK pasa de **11 MB a menos de 2 MB**: la versión de release ya no incluye código ni recursos que la app no usa
+
+## Novedades de la versión 2.7.1
 
 ### ↩️ Botón «Atrás»
 - Ya no cierra la app desde los resultados de una búsqueda: primero regresa a la pantalla de inicio

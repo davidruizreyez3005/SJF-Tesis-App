@@ -22,7 +22,9 @@ import org.robolectric.annotation.Config
 @Config(sdk = [33])
 class NavegacionAtrasTest {
 
-    @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+    // La fábrica se limpia antes de que la regla de Compose abra la actividad.
+    @get:Rule(order = 0) val fabrica = FabricaDeViewModelsLimpia()
+    @get:Rule(order = 1) val rule = createAndroidComposeRule<MainActivity>()
 
     private val vm get() = ViewModelProvider(rule.activity)[AppViewModel::class.java]
 

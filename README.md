@@ -10,6 +10,8 @@ App Android nativa para consultar, leer y descargar tesis y jurisprudencias del 
 - **📚 Precedentes y votos**: los precedentes de la tesis (ejecutorias) con su localización y la sentencia completa, los asuntos que la integran y los votos particulares, concurrentes y aclaratorios con su texto completo.
 - **📖 Lectura del texto completo**: la app obtiene el contenido de la página de detalle, intenta primero el prerendering de Googlebot y cae al cascarón JS si hace falta.
 - **📑 PDF de tesis, ejecutorias y votos**: motor PDF propio en Kotlin puro (paquete `pdf/`), sin dependencias: fuentes estándar Times sin incrustar, compresión Flate y escritura en flujo. Una ejecutoria de 40 páginas pesa ~100 KB. Incluye marcadores, «Página X de Y» y encabezado corrido.
+- **🔗 Enlaces del Semanario**: los enlaces de sjf2.scjn.gob.mx (y del sistema anterior) se abren en la app, desde otra app, con «Compartir» o pegados en el buscador.
+- **📴 Sin conexión**: las tesis guardadas conservan sus ejecutorias y votos en el teléfono (`data/local/DocumentosLocales.kt`).
 - **📚 Expediente**: la tesis con el texto completo de sus precedentes (ejecutorias) y votos en un solo PDF con índice vinculado.
 - **🗂 PDF combinado con índice**: varias tesis en un solo documento, con índice vinculado y números de página reales.
 - **📦 ZIP de PDFs**: cada tesis como PDF individual, empaquetados en un ZIP descargable y compartible.
