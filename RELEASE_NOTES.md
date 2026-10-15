@@ -1,8 +1,13 @@
-# SJF Tesis v2.8.0
+# SJF Tesis v2.8.1
 
 App Android para consultar el Semanario Judicial de la Federación.
 
-## Novedades de esta versión (2.8.0)
+## Novedades de esta versión (2.8.1)
+
+### 📄 PDF y lector
+- Se corrigieron los renglones cortados a media frase en ejecutorias y votos: los textos de la SCJN traen saltos de línea sueltos dentro de los rubros citados («…ARTÍCULO 22 DE LA ⏎ CONSTITUCIÓN…»), que dejaban un renglón corto sin justificar en medio del párrafo. Ahora se unen, y se conservan los saltos con sentido (fin de oración, incisos «a)», «I.», «1.»)
+
+## Novedades de la versión 2.8.0
 
 ### 🔗 Enlaces del Semanario
 - Los enlaces de **sjf2.scjn.gob.mx** (tesis, ejecutorias y votos) se abren directo en la app, también los del sistema anterior (*DetalleGeneralV2.aspx*), comunes en demandas y sentencias

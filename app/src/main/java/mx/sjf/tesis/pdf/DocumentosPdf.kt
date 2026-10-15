@@ -6,7 +6,7 @@ import mx.sjf.tesis.data.model.Voto
 import mx.sjf.tesis.data.util.CitationBuilder
 import mx.sjf.tesis.data.util.dividirPrecedentes
 import mx.sjf.tesis.data.util.formatDateLong
-import mx.sjf.tesis.data.util.textoPlano
+import mx.sjf.tesis.data.util.parrafosPlanos
 import java.io.OutputStream
 
 /** Un documento listo para escribir: bloques, formato, metadatos y nombre de archivo. */
@@ -346,7 +346,7 @@ object DocumentosPdf {
 
     /** Párrafos de un texto HTML o plano de la API. */
     internal fun parrafos(texto: String): List<String> =
-        textoPlano(texto).split(Regex("\\n\\s*\\n")).map { it.replace(Regex("\\s*\\n\\s*"), "\n").trim() }.filter { it.isNotEmpty() }
+        parrafosPlanos(texto)
 
     /**
      * Encabezado de una sentencia o tesis: renglón corto en mayúsculas

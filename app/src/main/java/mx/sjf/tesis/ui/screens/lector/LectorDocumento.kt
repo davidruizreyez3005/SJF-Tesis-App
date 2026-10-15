@@ -47,7 +47,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import mx.sjf.tesis.data.util.CitationBuilder
 import mx.sjf.tesis.data.util.autorDeVoto
-import mx.sjf.tesis.data.util.textoPlano
+import mx.sjf.tesis.data.util.parrafosPlanos
 import mx.sjf.tesis.pdf.DocumentosPdf
 import mx.sjf.tesis.ui.components.SectionLabel
 import mx.sjf.tesis.viewmodel.Lectura
@@ -62,16 +62,14 @@ private class Contenido(
     val parrafos: List<String>
 )
 
-private fun parrafos(html: String) =
-    textoPlano(html).split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
 
 private fun contenido(l: Lectura): Contenido? = when (l) {
     is Lectura.DeEjecutoria -> with(l.ejecutoria) {
-        Contenido(asunto, localizacion, publicacion, rubro, "Sentencia", parrafos(texto))
+        Contenido(asunto, localizacion, publicacion, rubro, "Sentencia", parrafosPlanos(texto))
     }
     is Lectura.DeVoto -> with(l.voto) {
         // El primer párrafo del texto oficial repite el título: no se duplica.
-        val p = parrafos(texto).let { if (it.firstOrNull()?.trimEnd('.') == titulo) it.drop(1) else it }
+        val p = parrafosPlanos(texto).let { if (it.firstOrNull()?.trimEnd('.') == titulo) it.drop(1) else it }
         Contenido(if (tipo.isNotBlank()) autorDeVoto(titulo) else titulo, "", publicacion, "", "Voto", p)
     }
     is Lectura.Cargando, is Lectura.Fallo -> null

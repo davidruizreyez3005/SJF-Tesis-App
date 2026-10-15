@@ -17,8 +17,8 @@ android {
         applicationId = "mx.sjf.tesis"
         minSdk = 26
         targetSdk = 34
-        versionCode = 15
-        versionName = "2.8.0"
+        versionCode = 16
+        versionName = "2.8.1"
         vectorDrawables { useSupportLibrary = true }
     }
 

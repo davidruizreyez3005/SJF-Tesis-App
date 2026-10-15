@@ -24,7 +24,7 @@ import androidx.compose.ui.draw.rotate
 import mx.sjf.tesis.data.model.Ejecutoria
 import mx.sjf.tesis.data.model.Voto
 import mx.sjf.tesis.data.util.dividirPrecedentes
-import mx.sjf.tesis.data.util.textoPlano
+import mx.sjf.tesis.data.util.parrafosPlanos
 import mx.sjf.tesis.viewmodel.DocumentosUi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -561,7 +561,7 @@ private fun VotoCard(voto: Voto, onOpenUrl: (String) -> Unit, onDownload: (Voto)
                 // El primer párrafo del texto oficial es el título que ya se ve
                 // en el encabezado de la tarjeta: no se repite.
                 val cuerpo = remember(voto.texto) {
-                    val parrafos = textoPlano(voto.texto).split(Regex("\\n\\s*\\n"))
+                    val parrafos = parrafosPlanos(voto.texto)
                     val sinTitulo = if (parrafos.firstOrNull()?.trim()?.trimEnd('.') == voto.titulo) parrafos.drop(1) else parrafos
                     sinTitulo.joinToString("\n\n")
                 }

@@ -74,3 +74,28 @@ private fun fragmentar(parrafo: String): List<Fragmento> {
 /** Texto plano a partir de HTML o texto con párrafos. */
 fun textoPlano(texto: String): String =
     parrafosDeTexto(texto).joinToString("\n\n") { p -> p.joinToString("") { it.texto } }.trim()
+
+private val RX_FIN_DE_ORACION = Regex("""[.:;!?…]["'”’»)\]]*$""")
+private val RX_INICIO_DE_LISTA = Regex("""^(?:[a-zA-Z]\)|[IVXLC]+\.|\d+[.)]|[-–—•])\s""")
+
+/**
+ * Une los renglones de un párrafo que la fuente cortó a media frase: los
+ * textos de la SCJN traen saltos sueltos (`<br>`) dentro de rubros citados
+ * («…ARTÍCULO 22 DE LA⏎CONSTITUCIÓN…»), que al justificar dejan renglones
+ * cortos en medio del párrafo. Se conserva el salto cuando el renglón cierra
+ * una oración o el siguiente empieza un inciso («a)», «I.», «1.», «–»).
+ */
+fun unirRenglones(parrafo: String): String {
+    val renglones = parrafo.split(Regex("\\s*\\n\\s*")).filter { it.isNotEmpty() }
+    if (renglones.size < 2) return renglones.firstOrNull().orEmpty()
+    val sb = StringBuilder(renglones[0])
+    for (i in 1 until renglones.size) {
+        val corte = RX_FIN_DE_ORACION.containsMatchIn(renglones[i - 1]) || RX_INICIO_DE_LISTA.containsMatchIn(renglones[i])
+        sb.append(if (corte) '\n' else ' ').append(renglones[i])
+    }
+    return sb.toString()
+}
+
+/** Párrafos de texto plano de un documento (ejecutoria, voto), con [unirRenglones] aplicado. */
+fun parrafosPlanos(texto: String): List<String> =
+    textoPlano(texto).split(Regex("\\n\\s*\\n")).map { unirRenglones(it.trim()) }.filter { it.isNotEmpty() }
