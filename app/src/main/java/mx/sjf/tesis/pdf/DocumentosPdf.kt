@@ -32,6 +32,7 @@ object DocumentosPdf {
 
     private const val PIE = "SJF Tesis · Generado a partir de sjf2.scjn.gob.mx · No es una publicación oficial de la SCJN"
     private const val SJF = "Semanario Judicial de la Federación"
+    private const val DETALLE = "https://sjf2.scjn.gob.mx/detalle"
 
     // ── Documentos ──
 
@@ -182,7 +183,10 @@ object DocumentosPdf {
         b += Bloque.Regla(grosor = 0.5f, gris = 0.6f, antes = 8f, despues = 14f)
 
         // Rubro.
-        b += Bloque.Parrafo(listOf(Tramo(t.rubro.ifBlank { "Tesis sin rubro" }, PdfFont.BOLD)), tamano = 11.5f, despues = 12f)
+        b += Bloque.Parrafo(
+            listOf(Tramo(t.rubro.ifBlank { "Tesis sin rubro" }, PdfFont.BOLD)), tamano = 11.5f, despues = 12f,
+            marcador = if (conMarcadores) Marca("Rubro y texto", 1) else null
+        )
 
         // Texto con las etiquetas «Hechos:», «Criterio jurídico:», «Justificación:» en negritas.
         if (t.texto.isBlank()) {
@@ -209,12 +213,16 @@ object DocumentosPdf {
                 ejecutorias.forEachIndexed { i, e ->
                     b += Bloque.Parrafo(
                         listOf(Tramo("${i + 1}. Registro digital ${e.registro}. ", PdfFont.BOLD), Tramo(e.localizacion)),
-                        tamano = 10.5f, alineacion = Alineacion.IZQUIERDA, despues = if (e.asunto.isNotBlank()) 1f else 6f
+                        tamano = 10.5f, alineacion = Alineacion.IZQUIERDA, despues = if (e.asunto.isNotBlank()) 1f else 6f,
+                        url = e.urlDetalle
                     )
                     if (e.asunto.isNotBlank()) b += Bloque.Parrafo(listOf(Tramo(e.asunto, PdfFont.ITALIC)), tamano = 10f, sangria = 14f, gris = 0.3f, alineacion = Alineacion.IZQUIERDA, despues = 6f)
                 }
             } else {
-                registrosEjec.forEachIndexed { i, r -> b += parrafo("${i + 1}. Registro digital $r", PdfFont.ROMAN, 10.5f, Alineacion.IZQUIERDA, despues = 4f) }
+                registrosEjec.forEachIndexed { i, r ->
+                    b += parrafo("${i + 1}. Registro digital $r", PdfFont.ROMAN, 10.5f, Alineacion.IZQUIERDA, despues = 4f)
+                        .copy(url = "$DETALLE/ejecutoria/$r")
+                }
             }
         }
 
@@ -238,8 +246,14 @@ object DocumentosPdf {
         if (registrosVoto.isNotEmpty()) {
             b += seccion("Votos", if (conMarcadores) 1 else null)
             if (votos.isNotEmpty()) votos.forEach { v ->
-                b += Bloque.Parrafo(listOf(Tramo(v.titulo + ". "), Tramo("Registro digital ${v.registro}.", PdfFont.ITALIC)), tamano = 10.5f, alineacion = Alineacion.IZQUIERDA, despues = 5f)
-            } else registrosVoto.forEach { r -> b += parrafo("Registro digital $r", PdfFont.ROMAN, 10.5f, Alineacion.IZQUIERDA, despues = 4f) }
+                b += Bloque.Parrafo(
+                    listOf(Tramo(v.titulo + ". "), Tramo("Registro digital ${v.registro}.", PdfFont.ITALIC)),
+                    tamano = 10.5f, alineacion = Alineacion.IZQUIERDA, despues = 5f, url = v.urlDetalle
+                )
+            } else registrosVoto.forEach { r ->
+                b += parrafo("Registro digital $r", PdfFont.ROMAN, 10.5f, Alineacion.IZQUIERDA, despues = 4f)
+                    .copy(url = "$DETALLE/voto/$r")
+            }
         }
 
         // Nota oficial de publicación y forma de citar.
@@ -247,9 +261,9 @@ object DocumentosPdf {
             b += Bloque.Espacio(6f)
             b += Bloque.Parrafo(listOf(Tramo(t.publicacion, PdfFont.ITALIC)), tamano = 9.5f, gris = 0.25f, despues = 6f)
         }
-        b += seccion("Forma de citar", null)
+        b += seccion("Forma de citar", if (conMarcadores) 1 else null)
         b += Bloque.Parrafo(listOf(Tramo(CitationBuilder.referencia(t))), tamano = 10.5f, despues = 4f)
-        b += Bloque.Parrafo(listOf(Tramo(t.urlDetalle, PdfFont.ITALIC)), tamano = 9f, gris = 0.35f, alineacion = Alineacion.IZQUIERDA)
+        b += enlaceOficial(t.urlDetalle)
         return b
     }
 
@@ -280,7 +294,7 @@ object DocumentosPdf {
             b += Bloque.Espacio(6f)
             b += Bloque.Parrafo(listOf(Tramo(e.publicacion, PdfFont.ITALIC)), tamano = 9.5f, gris = 0.25f)
         }
-        b += Bloque.Parrafo(listOf(Tramo(e.urlDetalle, PdfFont.ITALIC)), tamano = 9f, gris = 0.35f, alineacion = Alineacion.IZQUIERDA, antes = 8f)
+        b += enlaceOficial(e.urlDetalle).copy(antes = 8f)
         return b
     }
 
@@ -300,7 +314,7 @@ object DocumentosPdf {
         // El primer párrafo del texto oficial es el título del voto: va como subtítulo.
         if (cuerpo.isNotEmpty()) b += Bloque.Parrafo(listOf(Tramo(cuerpo.first(), PdfFont.BOLD_ITALIC)), tamano = 11f, despues = 10f)
         cuerpo.drop(1).forEach { p -> b += parrafoLargo(p, marcadores = false) }
-        b += Bloque.Parrafo(listOf(Tramo(v.urlDetalle, PdfFont.ITALIC)), tamano = 9f, gris = 0.35f, alineacion = Alineacion.IZQUIERDA, antes = 8f)
+        b += enlaceOficial(v.urlDetalle).copy(antes = 8f)
         return b
     }
 
@@ -329,6 +343,11 @@ object DocumentosPdf {
         parrafo("SEMANARIO JUDICIAL DE LA FEDERACIÓN", PdfFont.BOLD, 9f, Alineacion.CENTRADA, gris = 0.35f, despues = 2f),
         parrafo("$tipo · Registro digital $registro", PdfFont.ROMAN, 9f, Alineacion.CENTRADA, gris = 0.35f, despues = 6f),
         Bloque.Regla(grosor = 1f, antes = 2f, despues = 14f)
+    )
+
+    /** Dirección del documento en el sitio oficial; al tocarla se abre. */
+    private fun enlaceOficial(url: String) = Bloque.Parrafo(
+        listOf(Tramo(url, PdfFont.ITALIC)), tamano = 9f, gris = 0.35f, alineacion = Alineacion.IZQUIERDA, url = url
     )
 
     private fun seccion(titulo: String, nivelMarcador: Int?): Bloque.Parrafo = Bloque.Parrafo(

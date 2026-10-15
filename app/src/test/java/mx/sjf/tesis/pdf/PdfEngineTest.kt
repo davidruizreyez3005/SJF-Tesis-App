@@ -61,6 +61,9 @@ class PdfEngineTest {
         return Regex("/Type /Page /Parent").findAll(s).count()
     }
 
+    /** Vínculos dentro del documento (los marcadores también usan /Dest, pero no son anotaciones). */
+    private fun vinculosInternos(s: String) = Regex("""/Subtype /Link /Border \[0 0 0\] /Rect \[[^\]]*\] /Dest""").findAll(s).count()
+
     private fun escribir(doc: DocumentoPdf): Pair<ByteArray, Int> {
         val out = ByteArrayOutputStream()
         val paginas = doc.escribir(out)
@@ -115,7 +118,7 @@ class PdfEngineTest {
         val (pdf, paginas) = escribir(DocumentosPdf.expediente(tesis, listOf(ejecutoria), listOf(voto)))
         assertEquals(paginas, validar(pdf))
         val s = String(pdf, Charsets.ISO_8859_1)
-        assertEquals("5 renglones del índice con vínculo (tesis, 2 títulos de sección, ejecutoria, voto)", 5, Regex("/Subtype /Link").findAll(s).count())
+        assertEquals("5 renglones del índice con vínculo (tesis, 2 títulos de sección, ejecutoria, voto)", 5, vinculosInternos(s))
         assertTrue(s.contains("/PageMode /UseOutlines"))
     }
 
@@ -125,7 +128,7 @@ class PdfEngineTest {
         val (pdf, paginas) = escribir(DocumentosPdf.compilacion(varias, "x.pdf"))
         assertEquals(paginas, validar(pdf))
         assertTrue(paginas >= 6)   // índice + al menos una página por tesis
-        assertEquals(5, Regex("/Subtype /Link").findAll(String(pdf, Charsets.ISO_8859_1)).count())
+        assertEquals(5, vinculosInternos(String(pdf, Charsets.ISO_8859_1)))
     }
 
     @Test
@@ -143,5 +146,25 @@ class PdfEngineTest {
         val url = "https://sjf2.scjn.gob.mx/" + "x".repeat(400)
         val (pdf, paginas) = escribir(DocumentosPdf.voto(voto.copy(texto = "<p>Título.</p><p>$url</p>")))
         assertEquals(paginas, validar(pdf))
+    }
+
+    @Test
+    fun tesis_enlacesAlSitioOficialYMarcadores() {
+        val (pdf, _) = escribir(DocumentosPdf.tesis(tesis, listOf(ejecutoria), listOf(voto)))
+        val s = String(pdf, Charsets.ISO_8859_1)
+        // La dirección de la tesis, el precedente y el voto abren su página en sjf2.
+        for (url in listOf(tesis.urlDetalle, ejecutoria.urlDetalle, voto.urlDetalle)) {
+            assertTrue(url, s.contains("/S /URI /URI ($url)"))
+        }
+        // El índice lateral incluye el rubro y la forma de citar.
+        for (m in listOf("Rubro y texto", "Precedente de la tesis", "Votos", "Forma de citar")) {
+            assertTrue(m, s.contains("/Title ${PdfWriter.textoPdf(m)}"))
+        }
+    }
+
+    @Test
+    fun cadenaAscii_escapaYCodifica() {
+        assertEquals("(https://x.mx/a\\(1\\))", PdfWriter.cadenaAscii("https://x.mx/a(1)"))
+        assertEquals("(https://x.mx/%C3%B1)", PdfWriter.cadenaAscii("https://x.mx/ñ"))
     }
 }

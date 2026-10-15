@@ -29,7 +29,9 @@ sealed class Bloque {
         val gris: Float = 0f,
         val conSiguiente: Boolean = false,
         val ancla: String? = null,
-        val marcador: Marca? = null
+        val marcador: Marca? = null,
+        /** Dirección web que se abre al tocar el párrafo. */
+        val url: String? = null
     ) : Bloque()
 
     /** Fila de ficha: etiqueta a la izquierda (columna fija) y valor que puede ocupar varias líneas. */
@@ -103,7 +105,8 @@ class Maquetador(private val formato: Formato) {
     private sealed class Pieza {
         class Texto(val segmentos: List<Segmento>, val tamano: Float, val x: Float, val base: Float, val tw: Float, val gris: Float) : Pieza()
         class Raya(val x1: Float, val x2: Float, val y: Float, val grosor: Float, val gris: Float) : Pieza()
-        class Enlace(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val ancla: String) : Pieza()
+        /** Zona tocable: lleva a un [ancla] del documento o abre una [url]. */
+        class Enlace(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val ancla: String? = null, val url: String? = null) : Pieza()
     }
 
     private class Pagina { val piezas = mutableListOf<Pieza>() }
@@ -127,6 +130,7 @@ class Maquetador(private val formato: Formato) {
         val total = final.paginas.size
         final.paginas.forEachIndexed { i, pagina ->
             val vinculos = pagina.piezas.filterIsInstance<Pieza.Enlace>().mapNotNull { e ->
+                if (e.url != null) return@mapNotNull PdfWriter.Vinculo(e.x1, e.y1, e.x2, e.y2, url = e.url)
                 val destino = final.anclas[e.ancla] ?: return@mapNotNull null
                 PdfWriter.Vinculo(e.x1, e.y1, e.x2, e.y2, PdfWriter.Destino(destino.first, destino.second))
             }
@@ -278,6 +282,10 @@ class Maquetador(private val formato: Formato) {
         }
         val base = top - (b.interlineado - b.tamano) / 2 - b.tamano * 0.8f
         pagina.piezas += Pieza.Texto(l.segmentos, l.tamano, x, base, tw, b.gris)
+        if (b.url != null) {
+            val ancho = l.ancho + tw * l.espacios
+            pagina.piezas += Pieza.Enlace(x, top - b.interlineado, x + ancho, top, url = b.url)
+        }
     }
 
     private fun colocarEntradaIndice(pagina: Pagina, e: Bloque.EntradaIndice, numero: Int?, top: Float, alto: Float) {

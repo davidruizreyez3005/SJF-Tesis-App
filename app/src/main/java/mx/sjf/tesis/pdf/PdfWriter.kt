@@ -22,8 +22,14 @@ class PdfWriter(private val salida: OutputStream) {
     /** Destino dentro del documento: página (base 0) y altura desde abajo. */
     data class Destino(val pagina: Int, val y: Float)
 
-    /** Rectángulo de una página que, al tocarlo, lleva a [destino]. */
-    data class Vinculo(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val destino: Destino)
+    /** Rectángulo de una página que, al tocarlo, lleva a [destino] o abre [url]. */
+    data class Vinculo(
+        val x1: Float, val y1: Float, val x2: Float, val y2: Float,
+        val destino: Destino? = null,
+        val url: String? = null
+    ) {
+        init { require((destino == null) != (url == null)) { "Un vínculo lleva a un destino o a una URL" } }
+    }
 
     /** Entrada del índice lateral. [hijos] forman el segundo nivel. */
     data class Marcador(val titulo: String, val destino: Destino, val hijos: List<Marcador> = emptyList())
@@ -69,10 +75,11 @@ class PdfWriter(private val salida: OutputStream) {
 
         val anotaciones = vinculos.map { v ->
             val n = reservar()
+            val accion = if (v.url != null) "/A << /S /URI /URI ${cadenaAscii(v.url)} >>"
+                         else v.destino!!.let { d -> "/Dest [${paginas[d.pagina]} 0 R /XYZ 0 ${num(d.y)} 0]" }
             objeto(
                 n,
-                "<< /Type /Annot /Subtype /Link /Border [0 0 0] /Rect [${num(v.x1)} ${num(v.y1)} ${num(v.x2)} ${num(v.y2)}] " +
-                    "/Dest [${paginas[v.destino.pagina]} 0 R /XYZ 0 ${num(v.destino.y)} 0] >>"
+                "<< /Type /Annot /Subtype /Link /Border [0 0 0] /Rect [${num(v.x1)} ${num(v.y1)} ${num(v.x2)} ${num(v.y2)}] $accion >>"
             )
             n
         }
@@ -189,6 +196,23 @@ class PdfWriter(private val salida: OutputStream) {
             val r = Math.round(v * 100f) / 100f
             return if (r == r.toLong().toFloat()) r.toLong().toString()
                    else String.format(Locale.US, "%.2f", r).trimEnd('0').trimEnd('.')
+        }
+
+        /**
+         * Cadena literal ASCII (para URI): se escapan «\\», «(» y «)»; lo que
+         * no es ASCII imprimible se codifica como %XX en UTF-8.
+         */
+        fun cadenaAscii(s: String): String {
+            val sb = StringBuilder("(")
+            for (b in s.toByteArray(Charsets.UTF_8)) {
+                val c = b.toInt() and 0xFF
+                when {
+                    c == '\\'.code || c == '('.code || c == ')'.code -> sb.append('\\').append(c.toChar())
+                    c in 0x21..0x7E -> sb.append(c.toChar())
+                    else -> sb.append(String.format(Locale.US, "%%%02X", c))
+                }
+            }
+            return sb.append(')').toString()
         }
 
         /**
